@@ -48,7 +48,11 @@ export function relatedProjects(tool: Tool, projects: Project[]) {
   );
 }
 export function executableStep(status: string, steps: { status: string }[]) {
-  if (["failed", "cancelled", "interrupted", "running"].includes(status))
+  if (
+    ["failed", "cancelled", "interrupted", "running", "outdated"].includes(
+      status,
+    )
+  )
     return -1;
   const index = steps.findIndex((s) => s.status === "pending");
   return index >= 0 &&
@@ -72,6 +76,7 @@ export const statusLabel: Record<string, string> = {
   "not-listed": "更新一覧に掲載なし",
   "version-unknown": "導入版が不明",
   major: "メジャー変更の確認",
+  outdated: "再計画が必要",
   prepared: "作業環境確認済み",
   ok: "取得済み",
   missing: "未検出",

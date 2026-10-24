@@ -33,3 +33,9 @@ Rust試験は候補の系列、プレリリース除外、WinGetのID照合・�
 - [pyenv commands](https://github.com/pyenv/pyenv/blob/master/COMMANDS.md)
 - [Python Install Manager](https://docs.python.org/3/using/windows.html)
 - [Conda install](https://docs.conda.io/projects/conda/en/stable/commands/install.html)
+
+## WinGet計画の必要性確認
+
+計画作成時にWinGetの導入版と更新候補を再取得する。候補がない場合は通常の通知を返し、計画を保存しない。導入版を読み取れない場合は取得失敗とし、更新不要とは判定しない。ソースを指定した際のSource列省略にも対応する。計画には導入版・候補版・管理元・確認日時を要約し、配布情報の全文は折りたたんで表示する。
+
+以前の候補版が固定されていないWinGet計画は、起動時に履歴を残したまま再計画が必要な状態にする。実行直前にも候補を確認し、変化・消滅した場合はコマンド実行前に停止する。WinGet経由の本体更新は上流の新しい版を理由に別の導入元へ切り替えない。WinGet以外の本体更新経路は従来どおり管理元の自己更新機能による判定となる。

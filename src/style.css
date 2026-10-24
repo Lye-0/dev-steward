@@ -1760,3 +1760,17 @@ input::placeholder {
     padding-inline: 10px;
   }
 }
+
+.evidence-detail {
+  margin-top: 16px;
+}
+.evidence-detail summary {
+  cursor: pointer;
+  color: var(--secondary);
+}
+.evidence-detail pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

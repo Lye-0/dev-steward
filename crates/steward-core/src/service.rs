@@ -37,6 +37,19 @@ impl Service {
             "同じデータベースを使用するDev Stewardが既に起動しています。".to_string()
         })?;
         for mut plan in store.list::<Plan>("plans")? {
+            if plan.status == "ready"
+                && plan
+                    .steps
+                    .iter()
+                    .any(|s| s.kind == "system-update" && !s.args.iter().any(|a| a == "--version"))
+            {
+                plan.status = "outdated".into();
+                plan.warnings.push(
+                    "旧形式のWinGet計画です。導入版と候補を再確認し、計画を作り直してください。"
+                        .into(),
+                );
+                store.put("plans", &plan.id, &plan)?;
+            }
             if plan.steps.iter().any(|s| s.status == "running") {
                 for s in &mut plan.steps {
                     if s.status == "running" {
@@ -111,16 +124,11 @@ impl Service {
                         return Err("保存されたWinGet候補と一致しません。再取得してください".into());
                     }
                 }
-                let mut plan = crate::maintenance::winget(&env, &settings, package)?;
-                if let Some(candidate) = candidate {
-                    plan.steps[0]
-                        .args
-                        .extend(crate::process::strings(&["--version", candidate]));
-                    plan.evidence.push(format!("選択した配布版: {candidate}"));
-                }
-                self.save_plan(plan)
+                self.save_maintenance(crate::maintenance::winget(
+                    &env, &settings, package, candidate,
+                )?)
             }
-            "plan_manager_update" => self.save_plan(crate::maintenance::manager_update(
+            "plan_manager_update" => self.save_maintenance(crate::maintenance::manager_update(
                 &self.env(field(&payload, "environment")?)?,
                 &settings,
                 field(&payload, "manager")?,
@@ -656,6 +664,14 @@ impl Service {
             _ => Err("未対応の操作です".into()),
         }
     }
+    fn save_maintenance(&self, result: crate::maintenance::UpdatePlan) -> Result<Value, String> {
+        match result {
+            crate::maintenance::UpdatePlan::Ready(plan) => self.save_plan(*plan),
+            crate::maintenance::UpdatePlan::NoUpdate { message, installed } => {
+                Ok(json!({"status":"no-update","message":message,"installed":installed}))
+            }
+        }
+    }
     fn save_plan(&self, plan: Plan) -> Result<Value, String> {
         self.store.put("plans", &plan.id, &plan)?;
         self.store
@@ -672,7 +688,7 @@ impl Service {
             .map_err(|_| "別の更新工程が実行中です")?;
         process::CANCEL.store(false, Ordering::Relaxed);
         let mut plan: Plan = self.store.get("plans", id)?;
-        if ["interrupted", "failed", "cancelled"].contains(&plan.status.as_str()) {
+        if ["interrupted", "failed", "cancelled", "outdated"].contains(&plan.status.as_str()) {
             return Err(
                 "中断・失敗した計画は再実行しません。差分を確認し再調査・再計画してください。"
                     .into(),
@@ -697,6 +713,23 @@ impl Service {
             plans::assert_fresh(&env, &settings, p, &plan)?;
         }
         let step = plan.steps[index].clone();
+        if step.kind == "system-update" {
+            let value = |flag: &str| {
+                step.args
+                    .iter()
+                    .position(|a| a == flag)
+                    .and_then(|i| step.args.get(i + 1))
+                    .map(String::as_str)
+            };
+            let package = value("--id").ok_or("更新対象の再確認が必要です")?;
+            let expected = value("--version").ok_or("旧形式の計画です。再計画してください")?;
+            let (_, candidate) = crate::maintenance::winget_check(&env, &settings, package)?;
+            if candidate.as_deref() != Some(expected) {
+                plan.status = "outdated".into();
+                self.store.put("plans", &plan.id, &plan)?;
+                return Err("更新候補がなくなったか変更されています。更新は実行せず、再計画を求めています。".into());
+            }
+        }
         if step.kind == "merge-pr" {
             let p = project.as_ref().ok_or("対象のプロジェクトがありません")?;
             crate::git_workflow::pr_ready(&env, &settings, p)?;

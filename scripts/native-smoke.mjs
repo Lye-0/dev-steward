@@ -715,12 +715,35 @@ try {
   await page
     .getByRole("heading", { name: "WinGet: Example.App の更新", exact: true })
     .waitFor();
+  const evidenceDetails = page.locator(".evidence-detail");
+  assert.equal(await evidenceDetails.count(), 1);
+  assert.equal(await evidenceDetails.getAttribute("open"), null);
+  await evidenceDetails
+    .getByText("配布情報・取得結果の詳細", { exact: true })
+    .click();
+  assert(await evidenceDetails.locator("pre").isVisible());
+  await evidenceDetails
+    .getByText("配布情報・取得結果の詳細", { exact: true })
+    .click();
   const savedSystemPlan = (await native("snapshot")).plans.find(
     (p) => p.title === "WinGet: Example.App の更新",
   );
   assert(savedSystemPlan.steps[0].args.includes("1.1.0"));
   assert(savedSystemPlan.steps[0].args.includes("--version"));
   await page.getByRole("tab", { name: "環境の更新", exact: true }).click();
+  await page.getByRole("tab", { name: "管理ツール本体", exact: true }).click();
+  const previousPlanCount = (await native("snapshot")).plans.length;
+  await page
+    .getByRole("button", { name: "mise の更新を計画", exact: true })
+    .click();
+  await page.getByText(/jdx\.mise はWinGetで更新候補がありません/).waitFor();
+  assert.equal((await native("snapshot")).plans.length, previousPlanCount);
+  assert.equal(
+    await page
+      .getByRole("tab", { name: "環境の更新", exact: true })
+      .getAttribute("aria-selected"),
+    "true",
+  );
   await page.getByRole("tab", { name: "開発ツール", exact: true }).click();
   const candidateTab = page.getByRole("tab", {
     name: "環境の更新",

@@ -42,6 +42,36 @@ v24.1.0"
         ] => println!(
             r#"{{"success":true,"actions":{{"LINK":[{{"name":"python","version":"3.12.9"}}]}}}}"#
         ),
+        [
+            "list",
+            "--id",
+            "jdx.mise",
+            "--exact",
+            "--disable-interactivity",
+        ] => println!("Name ID Version Source\nMise jdx.mise 2026.10.12 winget"),
+        [
+            "list",
+            "--id",
+            id,
+            "--exact",
+            "--source",
+            "winget",
+            "--disable-interactivity",
+        ] => {
+            if *id == "Example.App" {
+                if root.join("manager-current").exists() {
+                    println!("Name ID Version\nApp Example.App 1.1.0");
+                } else {
+                    println!(
+                        "Name ID Version Available Source\nApp Example.App 1.0.0 1.1.0 winget"
+                    );
+                }
+            } else if *id == "jdx.mise" {
+                println!("Name ID Version Source\nMise jdx.mise 2026.10.12 winget");
+            } else {
+                std::process::exit(9);
+            }
+        }
         ["upgrade", "--disable-interactivity"] => println!(
             "Name ID Version Available Source
 -----------------------------------------
@@ -54,8 +84,13 @@ Example App  Example.App  1.0.0  1.1.0  winget"
             "--exact",
             "--source",
             "winget",
+            "--version",
+            "1.1.0",
             "--disable-interactivity",
-        ] => println!("Example.App 1.1.0"),
+        ] => println!(
+            "Example.App 1.1.0\n{}",
+            "Release notes and installer metadata. ".repeat(100)
+        ),
         ["--list-paths"] => {
             eprintln!(
                 " -3.10-64 * {}",

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -128,6 +128,43 @@ assert.throws(() =>
     candidate: "9.0.0",
   }),
 );
+const before = invoke("snapshot").plans.length;
+const noUpdate = invoke("plan_manager_update", {
+  environment: "local",
+  manager: "mise",
+});
+assert.equal(noUpdate.status, "no-update");
+assert.equal(noUpdate.installed, "2026.10.12");
+assert.equal(invoke("snapshot").plans.length, before);
+// A candidate disappearing after planning must stop before the update command.
+writeFileSync(join(temp, "manager-current"), "");
+assert.throws(() => invoke("execute_step", { plan: plan.id, confirmed: true }));
+assert.equal(
+  invoke("snapshot").plans.find((p) => p.id === plan.id).status,
+  "outdated",
+);
+unlinkSync(join(temp, "manager-current"));
+// Old unpinned plans are retained, but disabled for re-planning.
+const old = {
+  ...plan,
+  id: "old-unpinned-plan",
+  status: "ready",
+  steps: plan.steps.map((s) => ({
+    ...s,
+    args: s.args.filter(
+      (a, i, list) => a !== "--version" && list[i - 1] !== "--version",
+    ),
+  })),
+};
+const oldDb = new DatabaseSync(database);
+oldDb
+  .prepare("INSERT INTO records VALUES (?,?,?)")
+  .run("plans", old.id, JSON.stringify(old));
+oldDb.close();
+assert.equal(
+  invoke("snapshot").plans.find((p) => p.id === old.id).status,
+  "outdated",
+);
 // No install commands are supported by the fixture: all tests stop at plan creation.
 console.log(
   JSON.stringify(
@@ -138,6 +175,9 @@ console.log(
       wingetCandidates: true,
       unlistedIsNotLatest: true,
       selectedVersionPinned: true,
+      noOpPlanSuppressed: true,
+      staleExecutionBlocked: true,
+      legacyPlansInvalidated: true,
       installExecuted: false,
     },
     null,

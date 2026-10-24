@@ -345,7 +345,13 @@ export function App() {
     setUpdateView("environment");
     setPage("plans");
   }
-  function openPlan(p: Plan) {
+  function openPlan(
+    p: Plan | { status: "no-update"; message: string; installed: string },
+  ) {
+    if ("message" in p) {
+      setNotice(p.message);
+      return;
+    }
     setPlanId(p.id);
     setStaticPlanId("");
     setUpdateView("plans");
@@ -1831,12 +1837,21 @@ export function App() {
                             </div>
                             <Badge status={plan.status} />
                           </div>
-                          {plan.evidence.map((e, i) => (
-                            <p className="evidence" key={i}>
-                              <Check size={15} />
-                              {e}
-                            </p>
-                          ))}
+                          {plan.evidence.map((e, i) =>
+                            e.length > 240 ||
+                            e.split("\n").length > 3 ||
+                            e.startsWith("配布情報:") ? (
+                              <details className="evidence-detail" key={i}>
+                                <summary>配布情報・取得結果の詳細</summary>
+                                <pre>{e}</pre>
+                              </details>
+                            ) : (
+                              <p className="evidence" key={i}>
+                                <Check size={15} />
+                                {e}
+                              </p>
+                            ),
+                          )}
                           <div className="plan-warnings">
                             {plan.warnings.map((w, i) => (
                               <p key={i}>
@@ -1907,11 +1922,16 @@ export function App() {
                             </button>
                           </section>
                         )}
-                        {["failed", "cancelled", "interrupted"].includes(
-                          plan.status,
-                        ) && (
+                        {[
+                          "failed",
+                          "cancelled",
+                          "interrupted",
+                          "outdated",
+                        ].includes(plan.status) && (
                           <p className="warning-note">
-                            結果を確認し、プロジェクトを再調査して再計画してください。失敗した操作を自動で繰り返しません。
+                            {plan.status === "outdated"
+                              ? "対象の現在の状態を再確認し、計画を作り直してください。"
+                              : "結果を確認し、対象を再調査して再計画してください。失敗した操作を自動で繰り返しません。"}
                           </p>
                         )}
                       </>

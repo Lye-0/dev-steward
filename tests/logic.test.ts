@@ -40,7 +40,13 @@ describe("execution state", () => {
     ).toBe(1);
   });
   it("never replays failed or interrupted operations", () => {
-    for (const status of ["failed", "cancelled", "interrupted", "running"])
+    for (const status of [
+      "failed",
+      "cancelled",
+      "interrupted",
+      "running",
+      "outdated",
+    ])
       expect(executableStep(status, [{ status: "pending" }])).toBe(-1);
   });
   it("blocks execution after failure", () => {
