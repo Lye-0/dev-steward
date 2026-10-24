@@ -37,7 +37,7 @@ Windows x64版は `target/release/dev-steward.exe` に作成されます。開�
 
 GitHubからの取得・PR操作はGitHub CLIを利用します。必要な場合にインストールして `gh auth login` で認証してください。利用者がアクセスできるリポジトリ（最大300件）を一覧表示します。認証情報をアプリへ入力する必要はありません。
 
-まずクローン、次にローカルの静的調査を行います。GitHub上だけの検査でローカル動作確認済みとは表示しません。
+「GitHub調査」では、クローンせずに必要な設定・ロックファイルだけを取得し、更新候補の照合と静的な更新方針を作成できます。複数リポジトリの選択と任意のブランチ・参照名に対応します。[操作と対応範囲](github-investigation.md)を参照してください。実際に更新・検証する場合は、クローンしてローカルの作業環境を用意します。GitHub上の静的調査をローカル動作確認済みとは表示しません。
 
 更新前に既定ブランチを最新へ合わせたい場合は「既定ブランチへの同期を計画」を使用します。その後に再調査・更新候補の再照合をしてください。更新ブランチは、計画を作った時点のローカルHEADから開始します。
 
@@ -77,6 +77,7 @@ cargo clippy -p steward-core --all-targets --locked -- -D warnings
 cargo build -p steward-core --bin steward
 pnpm test:update
 pnpm test:discovery
+pnpm test:github
 cargo build -p dev-steward
 pnpm test:e2e
 pnpm tauri build --no-bundle

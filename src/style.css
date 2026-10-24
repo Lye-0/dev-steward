@@ -1523,3 +1523,17 @@ input::placeholder {
 .tool-detail-content .preserve {
   overflow-wrap: anywhere;
 }
+
+.github-toolbar {
+  margin-top: 22px;
+}
+.repo-row > input[type="checkbox"] {
+  flex-shrink: 0;
+}
+.repo-row > button {
+  flex-shrink: 0;
+}
+
+.repo-row strong {
+  overflow-wrap: anywhere;
+}

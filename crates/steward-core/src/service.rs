@@ -73,7 +73,7 @@ impl Service {
     }
     pub fn snapshot(&self) -> Result<Value, String> {
         Ok(
-            json!({"environments":self.store.list::<Environment>("environments")?,"inventories":self.store.list::<Inventory>("inventories")?,"projects":self.store.list::<Project>("projects")?,"plans":self.store.list::<Plan>("plans")?,"history":self.store.history()?,"settings":self.settings(),"updates":self.store.list::<Vec<Update>>("updates")?.into_iter().flatten().collect::<Vec<_>>(),"links":self.store.list::<Vec<Value>>("links")?.into_iter().flatten().collect::<Vec<_>>(),"data_path":self.store.path,"version":env!("CARGO_PKG_VERSION")}),
+            json!({"environments":self.store.list::<Environment>("environments")?,"inventories":self.store.list::<Inventory>("inventories")?,"projects":self.store.list::<Project>("projects")?,"plans":self.store.list::<Plan>("plans")?,"history":self.store.history()?,"settings":self.settings(),"updates":self.store.list::<Vec<Update>>("updates")?.into_iter().flatten().collect::<Vec<_>>(),"links":self.store.list::<Vec<Value>>("links")?.into_iter().flatten().collect::<Vec<_>>(),"github_projects":self.store.list::<crate::github::Report>("github_projects")?,"github_updates":self.store.list::<Vec<Update>>("github_updates")?.into_iter().flatten().collect::<Vec<_>>(),"github_plans":self.store.list::<crate::github::Proposal>("github_plans")?,"github_errors":self.store.list::<Vec<Finding>>("github_errors")?.into_iter().flatten().collect::<Vec<_>>(),"data_path":self.store.path,"version":env!("CARGO_PKG_VERSION")}),
         )
     }
     pub fn call(&self, method: &str, payload: Value) -> Result<Value, String> {
@@ -327,26 +327,157 @@ impl Service {
                 process::CANCEL.store(true, Ordering::Relaxed);
                 Ok(json!(true))
             }
-            "github_repos" => {
+            "scan_github_repos" => {
+                let _guard = self
+                    .execution
+                    .try_lock()
+                    .map_err(|_| "別の調査・工程が実行中です")?;
+                let repos = array(&payload, "repositories");
+                if repos.is_empty() || repos.len() > 50 {
+                    return Err("調査するリポジトリを1〜50件選択してください".into());
+                }
+                for repo in &repos {
+                    crate::github::validate_repo(repo)?;
+                }
                 let env = self.env("local")?;
-                let gh = inventory::manager(&env, &settings, "gh")
-                    .ok_or("GitHub CLIが未検出です。gh auth loginで認証してください。")?;
-                let out = process::checked(
-                    &env,
-                    &gh,
-                    &[
-                        "repo",
-                        "list",
-                        "--limit",
-                        "300",
-                        "--json",
-                        "nameWithOwner,url,isArchived,defaultBranchRef,description",
-                    ],
-                    &env.home,
-                )?;
-                let result: Value = serde_json::from_str(&out).map_err(|e| e.to_string())?;
-                Ok(result)
+                let mut reports = vec![];
+                let mut errors = vec![];
+                let mut visited = std::collections::BTreeSet::new();
+                for repo in repos {
+                    if !visited.insert(repo.to_lowercase()) {
+                        continue;
+                    }
+                    match crate::github::scan(
+                        &env,
+                        &settings,
+                        &repo,
+                        payload["reference"].as_str().filter(|s| !s.is_empty()),
+                    ) {
+                        Ok(report) => {
+                            let previous = self
+                                .store
+                                .get::<crate::github::Report>("github_projects", &report.id)
+                                .ok();
+                            self.store.put("github_projects", &report.id, &report)?;
+                            self.store.delete("github_updates", &report.id)?;
+                            if previous.is_some_and(|p| {
+                                p.commit != report.commit
+                                    || p.project.fingerprint != report.project.fingerprint
+                            }) {
+                                for mut plan in self
+                                    .store
+                                    .list::<crate::github::Proposal>("github_plans")?
+                                    .into_iter()
+                                    .filter(|p| p.report_id == report.id)
+                                {
+                                    plan.status = "outdated".into();
+                                    self.store.put("github_plans", &plan.id, &plan)?;
+                                }
+                            }
+                            self.store.log(
+                                "GitHubの静的調査",
+                                &repo,
+                                if report.complete {
+                                    "complete"
+                                } else {
+                                    "partial"
+                                },
+                                &report.commit,
+                            )?;
+                            reports.push(report);
+                        }
+                        Err(e) => {
+                            let e = crate::redact::output(&e);
+                            self.store.log("GitHubの静的調査", &repo, "failed", &e)?;
+                            errors.push(finding(&repo, "error", e));
+                        }
+                    }
+                    self.store.put("github_errors", "latest", &errors)?;
+                }
+                Ok(json!({"reports":reports,"errors":errors}))
             }
+            "check_github_updates_batch" => {
+                let _guard = self
+                    .execution
+                    .try_lock()
+                    .map_err(|_| "別の調査・工程が実行中です")?;
+                let ids = array(&payload, "reports");
+                if ids.is_empty() || ids.len() > 50 {
+                    return Err("照合する調査結果を1〜50件選択してください".into());
+                }
+                let mut errors = vec![];
+                let mut completed = 0;
+                let mut visited = std::collections::BTreeSet::new();
+                for id in ids {
+                    if !visited.insert(id.clone()) {
+                        continue;
+                    }
+                    let result = (|| -> Result<(), String> {
+                        let report: crate::github::Report =
+                            self.store.get("github_projects", &id)?;
+                        let updates = updates::project(&report.project)?;
+                        self.store.put("github_updates", &id, &updates)?;
+                        self.store.log(
+                            "GitHub依存の照合",
+                            &report.repository,
+                            "complete",
+                            &report.commit,
+                        )?;
+                        Ok(())
+                    })();
+                    match result {
+                        Ok(()) => completed += 1,
+                        Err(e) => errors.push(finding(&id, "error", crate::redact::output(&e))),
+                    }
+                    self.store.put("github_errors", "latest", &errors)?;
+                }
+                Ok(json!({"completed":completed,"errors":errors}))
+            }
+            "check_github_updates" => {
+                let _guard = self
+                    .execution
+                    .try_lock()
+                    .map_err(|_| "別の調査・工程が実行中です")?;
+                let report: crate::github::Report = self
+                    .store
+                    .get("github_projects", field(&payload, "report")?)?;
+                let result = updates::project(&report.project)?;
+                self.store.put("github_updates", &report.id, &result)?;
+                self.store.log(
+                    "GitHub依存の照合",
+                    &report.repository,
+                    "complete",
+                    &report.commit,
+                )?;
+                Ok(json!(result))
+            }
+            "plan_github_updates" => {
+                let _guard = self
+                    .execution
+                    .try_lock()
+                    .map_err(|_| "別の調査・工程が実行中です")?;
+                let report: crate::github::Report = self
+                    .store
+                    .get("github_projects", field(&payload, "report")?)?;
+                crate::github::assert_current(&self.env("local")?, &settings, &report)?;
+                let updates: Vec<Update> = self
+                    .store
+                    .get("github_updates", &report.id)
+                    .map_err(|_| "先に更新候補を照合してください")?;
+                let proposal = crate::github::proposal(&report, &updates)?;
+                self.store.put("github_plans", &proposal.id, &proposal)?;
+                self.store.log(
+                    "GitHub更新方針の作成",
+                    &report.repository,
+                    "draft",
+                    &report.commit,
+                )?;
+                Ok(json!(proposal))
+            }
+            "github_repos" => Ok(json!(crate::github::repositories(
+                &self.env("local")?,
+                &settings
+            )?)),
             "clone_repo" => {
                 let env = self.env("local")?;
                 let repo = field(&payload, "repo")?;

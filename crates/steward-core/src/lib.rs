@@ -1,6 +1,7 @@
 pub mod cleanup;
 pub mod discovery;
 pub mod git_workflow;
+pub mod github;
 pub mod integrations;
 pub mod inventory;
 pub mod maintenance;

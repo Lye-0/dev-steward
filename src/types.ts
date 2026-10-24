@@ -108,6 +108,10 @@ export interface History {
   detail: string;
 }
 export interface Snapshot {
+  github_projects: GithubReport[];
+  github_updates: Update[];
+  github_plans: GithubProposal[];
+  github_errors: Finding[];
   environments: Environment[];
   inventories: Inventory[];
   projects: Project[];
@@ -124,4 +128,28 @@ export interface Snapshot {
     venv?: string;
     home?: string;
   }[];
+}
+export interface GithubReport {
+  id: string;
+  repository: string;
+  host: string;
+  url: string;
+  branch: string;
+  commit: string;
+  tree: string;
+  complete: boolean;
+  files: { path: string; sha: string; size: number; status: string }[];
+  project: Project;
+}
+export interface GithubProposal {
+  id: string;
+  report_id: string;
+  commit: string;
+  created_at: string;
+  changes: Update[];
+  tools: Requirement[];
+  checks: string[];
+  steps: string[];
+  warnings: string[];
+  status: string;
 }

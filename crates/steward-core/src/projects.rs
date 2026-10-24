@@ -468,6 +468,27 @@ fn parse_python_deps(
     }
 }
 
+pub fn add_python_checks(requirements: &[Requirement], scripts: &mut Vec<String>) {
+    for requirement in requirements {
+        if requirement.manager == "pypi" && requirement.section != "locked" {
+            let name = match requirement.name.as_str() {
+                "pytest" => "uv-pytest",
+                "ruff" => "uv-ruff",
+                _ => continue,
+            };
+            let prefix = requirement
+                .source
+                .rsplit_once('/')
+                .map(|(p, _)| format!("{p}::"))
+                .unwrap_or_default();
+            let check = format!("{prefix}{name}");
+            if !scripts.contains(&check) {
+                scripts.push(check);
+            }
+        }
+    }
+}
+
 pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Project, String> {
     let path = safe_path(env, path)?;
     let top = git(env, settings, &path, &["rev-parse", "--show-toplevel"])?;
@@ -697,24 +718,7 @@ pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Projec
             Err(e) => project.findings.push(finding("仮想環境", "error", e)),
         }
     }
-    for requirement in &project.requirements {
-        if requirement.manager == "pypi" && requirement.section != "locked" {
-            let name = match requirement.name.as_str() {
-                "pytest" => "uv-pytest",
-                "ruff" => "uv-ruff",
-                _ => continue,
-            };
-            let prefix = requirement
-                .source
-                .rsplit_once('/')
-                .map(|(p, _)| format!("{p}::"))
-                .unwrap_or_default();
-            let check = format!("{prefix}{name}");
-            if !project.scripts.contains(&check) {
-                project.scripts.push(check);
-            }
-        }
-    }
+    add_python_checks(&project.requirements, &mut project.scripts);
     hash.update(serde_json::to_vec(&project.requirements).map_err(|e| e.to_string())?);
     project.fingerprint = format!("{:x}", hash.finalize());
     if project.package_manager.is_empty() {

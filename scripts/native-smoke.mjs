@@ -340,6 +340,85 @@ try {
   await page.keyboard.press("Home");
   await page.keyboard.press("Enter");
   assert.equal(await managerPicker.inputValue(), initialManager);
+  // Exercise clone-free GitHub import through the real window and service.
+  const fakeGithub = join(temp, "github fixture.exe");
+  execFileSync(
+    join(process.env.USERPROFILE, ".cargo/bin/rustc.exe"),
+    ["--edition=2024", "scripts/fixtures/github-cli.rs", "-o", fakeGithub],
+    { windowsHide: true, stdio: "pipe" },
+  );
+  const githubSettings = (await native("snapshot")).settings;
+  githubSettings.manager_overrides = githubSettings.manager_overrides.filter(
+    ([, name]) => name !== "gh",
+  );
+  githubSettings.manager_overrides.push(["local", "gh", fakeGithub]);
+  await native("save_settings", githubSettings);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await page.getByRole("button", { name: "GitHub調査", exact: true }).click();
+  await page
+    .getByRole("button", { name: "リポジトリを選択", exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", { name: "Example/monorepoを調査対象に選択" })
+    .check();
+  await page
+    .getByRole("checkbox", { name: "Example/deniedを調査対象に選択" })
+    .check();
+  await page
+    .getByRole("button", {
+      name: "選択したリポジトリを調査（2件）",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("heading", { name: "GitHub上で調査", exact: true })
+    .waitFor();
+  await page.getByRole("table", { name: "GitHubの調査結果" }).waitFor();
+  await page
+    .getByRole("checkbox", { name: "Example/monorepo (main)を照合対象に選択" })
+    .check();
+  await page
+    .getByRole("button", { name: "選択した結果を照合（1件）", exact: true })
+    .click();
+  await page
+    .getByText("選択したGitHub依存を照合中…", { exact: false })
+    .waitFor({ state: "hidden", timeout: 120000 });
+  await page
+    .getByRole("button", { name: "Example/monorepo (main)", exact: true })
+    .click();
+  await page
+    .getByRole("table", { name: "GitHubの更新候補", exact: true })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "更新方針を作成", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "更新方針 （静的な計画）", exact: false })
+    .waitFor();
+  const githubSnapshot = await native("snapshot");
+  assert.equal(
+    githubSnapshot.projects.length,
+    1,
+    "Remote analysis must not register a checkout",
+  );
+  assert.equal(githubSnapshot.github_projects.length, 1);
+  assert(
+    githubSnapshot.github_plans[0].changes.some(
+      (c) => c.name === "kleur" && c.candidate === "4.1.5",
+    ),
+  );
+  await page.screenshot({
+    path: "test-results/native-github-analysis.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 780, height: 800 });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    ),
+    false,
+    "GitHub page should not overflow horizontally",
+  );
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
     JSON.stringify(

@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
+import { GithubReports } from "./GithubReports";
 import {
   displayDate,
   groupTools,
@@ -35,15 +36,26 @@ import {
 import type { Snapshot, Plan, Update, Settings } from "./types";
 
 type Page =
-  "overview" | "environment" | "projects" | "plans" | "history" | "settings";
+  | "overview"
+  | "environment"
+  | "projects"
+  | "github"
+  | "plans"
+  | "history"
+  | "settings";
 const pages: { id: Page; label: string; icon: typeof Monitor }[] = [
   { id: "overview", label: "全体状況", icon: Layers3 },
   { id: "environment", label: "開発環境", icon: Monitor },
   { id: "projects", label: "プロジェクト", icon: FolderGit2 },
+  { id: "github", label: "GitHub調査", icon: GitFork },
   { id: "plans", label: "更新計画", icon: ListChecks },
   { id: "history", label: "実行履歴", icon: Clock3 },
 ];
 const empty: Snapshot = {
+  github_projects: [],
+  github_updates: [],
+  github_plans: [],
+  github_errors: [],
   environments: [],
   inventories: [],
   projects: [],
@@ -135,6 +147,8 @@ export function App() {
     | null
   >(null);
   const [cloneParent, setCloneParent] = useState("");
+  const [githubSelection, setGithubSelection] = useState<string[]>([]);
+  const [githubReference, setGithubReference] = useState("");
   const [pr, setPr] = useState<unknown>(null);
   const [systemOutput, setSystemOutput] = useState("");
   const [systemPackage, setSystemPackage] = useState("");
@@ -1096,6 +1110,27 @@ export function App() {
               </section>
             </>
           )}
+          {page === "github" && (
+            <GithubReports
+              data={data}
+              tools={tools}
+              scanned={!!inventory}
+              environment={environment?.name ?? env}
+              busy={!!busy}
+              act={act}
+              open={() =>
+                act(
+                  "GitHubのリポジトリを取得中",
+                  "github_repos",
+                  null,
+                  (repos) => {
+                    setGithubSelection([]);
+                    setGitFork(repos);
+                  },
+                )
+              }
+            />
+          )}
           {page === "projects" && (
             <>
               <PageHeading
@@ -1767,34 +1802,104 @@ export function App() {
         >
           <p>
             GitHub
-            CLIで認証したアカウントのリポジトリ（最大300件）です。まだクローンしていないものを取り込めます。
+            CLIで認証したアカウントのリポジトリ（最大300件）です。必要なファイルだけを調査するか、クローンして作業するか選べます。
           </p>
-          <label htmlFor="clone-parent">クローン先の親フォルダー</label>
+          <label htmlFor="github-reference">
+            ブランチ・参照名（空欄は各リポジトリの既定）
+          </label>
           <div className="input-row">
             <input
-              id="clone-parent"
-              value={cloneParent}
-              onChange={(e) => setCloneParent(e.target.value)}
+              id="github-reference"
+              value={githubReference}
+              onChange={(e) => setGithubReference(e.target.value)}
+              placeholder="例: main、develop"
             />
+          </div>
+          <div className="button-row">
             <button
+              className="primary"
+              disabled={
+                !!busy || !githubSelection.length || githubSelection.length > 50
+              }
               onClick={() =>
-                chooseDirectory().then((v) => {
-                  if (v) setCloneParent(v);
-                })
+                act(
+                  "選択したGitHubリポジトリを静的調査中",
+                  "scan_github_repos",
+                  { repositories: githubSelection, reference: githubReference },
+                  () => {
+                    setGitFork(null);
+                    setPage("github");
+                    setGithubSelection([]);
+                  },
+                )
               }
             >
-              選択
+              選択したリポジトリを調査（{githubSelection.length}件）
             </button>
           </div>
+          <p className="muted">
+            1回に最大50件。調査にはクローン先の指定は不要です。更新候補の公開サービスとの照合は、取得後に別途実行します。
+          </p>
+          <details>
+            <summary>クローンして作業する場合の保存先</summary>
+            <label htmlFor="clone-parent">クローン先の親フォルダー</label>
+            <div className="input-row">
+              <input
+                id="clone-parent"
+                value={cloneParent}
+                onChange={(e) => setCloneParent(e.target.value)}
+              />
+              <button
+                onClick={() =>
+                  chooseDirectory().then((v) => {
+                    if (v) setCloneParent(v);
+                  })
+                }
+              >
+                選択
+              </button>
+            </div>
+          </details>
           <div className="repo-list">
             {github.length ? (
               github.map((r) => (
                 <div className="repo-row" key={r.nameWithOwner}>
+                  <input
+                    type="checkbox"
+                    aria-label={`${r.nameWithOwner}を調査対象に選択`}
+                    checked={githubSelection.includes(r.nameWithOwner)}
+                    onChange={(e) =>
+                      setGithubSelection((current) =>
+                        e.target.checked
+                          ? [...current, r.nameWithOwner]
+                          : current.filter((repo) => repo !== r.nameWithOwner),
+                      )
+                    }
+                  />
                   <FolderGit2 size={19} />
                   <div>
                     <strong>{r.nameWithOwner}</strong>
                     <p>{r.description || "説明なし"}</p>
                   </div>
+                  <button
+                    disabled={!!busy}
+                    onClick={() =>
+                      act(
+                        "GitHub上の設定を取得中",
+                        "scan_github_repos",
+                        {
+                          repositories: [r.nameWithOwner],
+                          reference: githubReference,
+                        },
+                        () => {
+                          setGitFork(null);
+                          setPage("github");
+                        },
+                      )
+                    }
+                  >
+                    GitHub上で調査
+                  </button>
                   <button
                     disabled={!!busy || !cloneParent || r.isArchived}
                     onClick={() =>
