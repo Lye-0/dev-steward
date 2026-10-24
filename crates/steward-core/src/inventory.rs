@@ -53,6 +53,36 @@ pub fn manager(env: &Environment, settings: &Settings, name: &str) -> Option<Str
     {
         return Some(path.clone());
     }
+    if env.kind == "local" {
+        let variable = match name {
+            "conda" => Some("CONDA_EXE"),
+            "pyenv" => Some("PYENV_EXECUTABLE"),
+            _ => None,
+        };
+        if let Some(path) = variable
+            .and_then(std::env::var_os)
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_absolute() && p.is_file())
+        {
+            return Some(path.to_string_lossy().into());
+        }
+        if name == "py" && env.os == "windows" {
+            let candidates = [
+                std::env::var_os("WINDIR").map(|p| std::path::PathBuf::from(p).join("py.exe")),
+                dirs::data_local_dir().map(|p| p.join("Programs/Python/Launcher/py.exe")),
+            ];
+            // PATH takes precedence; these are discoverable standard-location hints only.
+            if let Some(path) = resolve(env, name).or_else(|| {
+                candidates
+                    .into_iter()
+                    .flatten()
+                    .find(|p| p.is_file())
+                    .map(|p| p.to_string_lossy().into())
+            }) {
+                return Some(path);
+            }
+        }
+    }
     resolve(env, name).or_else(|| {
         if env.kind != "local" {
             return None;
@@ -111,6 +141,13 @@ pub fn parse_mise(data: &str, env: &Environment) -> Result<Vec<Tool>, String> {
 }
 
 pub fn parse_uv(data: &str, env: &Environment) -> Result<Vec<Tool>, String> {
+    parse_uv_with_root(data, env, None)
+}
+fn parse_uv_with_root(
+    data: &str,
+    env: &Environment,
+    root: Option<&str>,
+) -> Result<Vec<Tool>, String> {
     let value: Vec<Value> = serde_json::from_str(data).map_err(|e| format!("uv JSON: {e}"))?;
     let mut grouped: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for item in value {
@@ -121,11 +158,25 @@ pub fn parse_uv(data: &str, env: &Environment) -> Result<Vec<Tool>, String> {
         grouped.entry(key).or_default().push(item);
     }
     Ok(grouped.into_iter().map(|(key, items)| {
-        let item = items.iter().find(|i| i["path"].as_str().unwrap_or_default().contains(&key)).unwrap_or(&items[0]);
-        let path = item["path"].as_str().unwrap_or_default();
-        let canonical = if env.kind == "local" { std::fs::canonicalize(path).ok().map(|p| p.to_string_lossy().to_string()) } else { None };
-        Tool { id: format!("{}:uv:{key}", env.id), environment: env.id.clone(), manager: "uv".into(), name: "python".into(), version: item["version"].as_str().unwrap_or_default().into(), path: canonical.unwrap_or_else(|| path.into()), active: false, installed: true, source: String::new(), requested: key, note: format!("{}件のパスを同一配布キーで集約。ランチャーと実体の参照先は詳細で確認してください。\n{}", items.len(), items.iter().filter_map(|i| i["path"].as_str()).collect::<Vec<_>>().join("\n")) }
+        let item = items.iter().find(|i| root.is_some_and(|root| within(&inventory_path(env,i["path"].as_str().unwrap_or_default()),root,env.os=="windows")))
+            .or_else(|| items.iter().find(|i| i["path"].as_str().unwrap_or_default().contains(&key))).unwrap_or(&items[0]);
+        let path = inventory_path(env, item["path"].as_str().unwrap_or_default());
+        let canonical = if env.kind == "local" { std::fs::canonicalize(&path).ok().map(|p| p.to_string_lossy().to_string()) } else { None };
+        Tool { id: format!("{}:uv:{key}", env.id), environment: env.id.clone(), manager: "uv".into(), name: "python".into(), version: item["version"].as_str().unwrap_or_default().into(), path: canonical.unwrap_or(path), active: false, installed: true, source: String::new(), requested: key, note: format!("{}件のパスを同一配布キーで集約。ランチャーと実体の参照先は詳細で確認してください。\n{}", items.len(), items.iter().filter_map(|i| i["path"].as_str()).collect::<Vec<_>>().join("\n")) }
     }).collect())
+}
+
+fn inventory_path(env: &Environment, path: &str) -> String {
+    if path.is_empty() {
+        return String::new();
+    }
+    if (env.os == "windows" && !Path::new(path).is_absolute())
+        || (env.os != "windows" && !path.starts_with('/'))
+    {
+        join(&env.home, path, env)
+    } else {
+        path.into()
+    }
 }
 
 pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
@@ -179,7 +230,10 @@ pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
         match checked(env, &program, &args, &env.home) {
             Ok(output) => {
                 let parsed = match name {
-                    "mise" => parse_mise(&output, env), "uv" => parse_uv(&output, env),
+                    "mise" => parse_mise(&output, env), "uv" => {
+                        let root = checked(env,&program,&["python","dir"],&env.home).ok();
+                        parse_uv_with_root(&output,env,root.as_deref())
+                    },
                     _ => Ok(output.lines().filter(|s| !s.is_empty()).map(|line| {
                         let name = line.split_whitespace().next().unwrap_or_default();
                         let path=checked(env,&program,&["which","--toolchain",name,"rustc"],&env.home).unwrap_or_default();
@@ -204,11 +258,7 @@ pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
         match checked(env, uv, &["python", "dir"], &env.home) {
             Ok(dir) => {
                 for tool in report.tools.iter_mut().filter(|t| t.manager == "uv") {
-                    let absolute = if env.kind == "wsl" && !tool.path.starts_with('/') {
-                        join(&env.home, &tool.path, env)
-                    } else {
-                        tool.path.clone()
-                    };
+                    let absolute = inventory_path(env, &tool.path);
                     tool.path = if env.kind == "wsl" {
                         checked(
                             env,
@@ -218,7 +268,10 @@ pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
                         )
                         .unwrap_or(absolute)
                     } else {
-                        absolute
+                        std::fs::canonicalize(&absolute)
+                            .ok()
+                            .map(|p| p.to_string_lossy().into())
+                            .unwrap_or(absolute)
                     };
                     if !within(&tool.path, &dir, env.os == "windows") {
                         tool.manager = if env.os == "linux" && tool.path.starts_with("/usr/") {
@@ -235,9 +288,17 @@ pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
                 }
                 report.findings.push(finding("uv配置", "ok", dir));
             }
-            Err(e) => report.findings.push(finding("uv配置", "error", e)),
+            Err(e) => {
+                for tool in report.tools.iter_mut().filter(|t| t.manager == "uv") {
+                    tool.manager = "external".into();
+                    tool.note
+                        .push_str("\nuv管理先を確認できないため、uv管理とは確定していません。");
+                }
+                report.findings.push(finding("uv配置", "error", e));
+            }
         }
     }
+    crate::discovery::scan(env, settings, &mut report);
     if env.os == "linux" {
         report.findings.push(finding(
             "OS",
@@ -245,7 +306,7 @@ pub fn scan(env: &Environment, settings: &Settings) -> Inventory {
             "OS管理のPython・システムツールは削除しません。APTなどOS管理元を維持します。",
         ));
     }
-    report.findings.push(finding("調査範囲", "partial", "mise・uv・rustupの管理版を調査。アプリ同梱ランタイム、全インストーラー、全実行中プロセスを網羅するものではありません。未参照表示だけでは削除しません。"));
+    report.findings.push(finding("調査範囲", "partial", "mise・uv・rustupに加え、py／Python Install Manager・pyenv・Conda・fnm・nvm-windowsとPATH上の主要ランタイムを調査。シェル関数のみの管理元、全インストーラー、同梱ランタイムを網羅するものではありません。未参照表示だけでは削除しません。"));
     report
 }
 
@@ -287,6 +348,45 @@ mod tests {
         let rows=parse_uv(r#"[{"key":"cpython-3.13.1","version":"3.13.1","path":"/x/python"},{"key":"cpython-3.13.1","version":"3.13.1","path":"/y/python"}]"#,&env()).unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].note.contains("2件"));
+    }
+    #[test]
+    fn uv_minor_alias_in_managed_root_beats_launcher_even_without_full_distribution_key() {
+        let mut target = env();
+        target.kind = "wsl".into();
+        let rows = parse_uv_with_root(r#"[{"key":"cpython-3.13.17-linux-x86_64-gnu","version":"3.13.17","path":".local/bin/python3.13"},{"key":"cpython-3.13.17-linux-x86_64-gnu","version":"3.13.17","path":"custom/uv/python/cpython-3.13-linux-x86_64-gnu/bin/python"}]"#,&target,Some("/tmp/person/custom/uv/python")).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].path,
+            "/tmp/person/custom/uv/python/cpython-3.13-linux-x86_64-gnu/bin/python"
+        );
+    }
+    #[test]
+    fn uv_relative_paths_use_the_target_home_not_the_app_working_directory() {
+        let mut target = env();
+        target.kind = "wsl".into();
+        let rows = parse_uv(r#"[{"key":"cpython-3.13.1","version":"3.13.1","path":".local/share/uv/python/cpython-3.13.1/bin/python"}]"#, &target).unwrap();
+        assert_eq!(
+            rows[0].path,
+            "/tmp/person/.local/share/uv/python/cpython-3.13.1/bin/python"
+        );
+        assert!(within(
+            &rows[0].path,
+            "/tmp/person/.local/share/uv/python",
+            false
+        ));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_uv_relative_paths_are_resolved_from_the_environment_home() {
+        let mut target = env();
+        target.os = "windows".into();
+        target.home = "Q:\\Different User".into();
+        let rows = parse_uv(r#"[{"key":"cpython-3.13.1","version":"3.13.1","path":"AppData\\Roaming\\uv\\python\\cpython-3.13.1\\python.exe"}]"#, &target).unwrap();
+        assert!(within(
+            &rows[0].path,
+            "Q:\\Different User\\AppData\\Roaming\\uv\\python",
+            true
+        ));
     }
     #[test]
     fn unsupported_json_is_error() {

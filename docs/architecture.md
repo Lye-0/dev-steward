@@ -52,3 +52,11 @@ Manager updates use WinGet if the exact package is registered there; otherwise o
 Default storage is the OS application-data directory for the application identifier. `--data-dir <absolute-directory>` selects a separate profile; tests use this to avoid changing real state. SQLite contains local paths and should be handled as private workspace data.
 
 Rust is pinned through rust-toolchain.toml, Node/pnpm through mise.toml, and frontend dependencies through pnpm-lock.yaml. The application itself is built with Tauri's custom protocol for embedded assets. Its own distribution/update mechanism is independent from tool updates; automatic signed application updates are not configured before a publishing/signing process exists.
+
+## Manager-oriented discovery
+
+The environment UI partitions tools by their manager identifier into separately labelled tables. Search filters rows across all partitions; an empty result differs from a failed inventory. Unknown manager identifiers remain visible rather than being dropped.
+
+The read-only discovery adapters for py, Python Install Manager, pyenv, Conda, fnm and nvm-windows live in `crates/steward-core/src/discovery.rs`. The executable allowlist is shared by PATH resolution and settings validation. Platform applicability controls discovery, not the inventory on the developer's device. Extra managers are not silently granted mutation capabilities.
+
+A legacy py registration is discovery evidence, not ownership. Python Install Manager JSON explicitly distinguishes managed and unmanaged records. Known managed bodies take precedence when the same canonical executable or runtime directory is found through multiple discovery routes. Conda records are keyed by environment as well as runtime name, not just version. Version tags from a legacy launcher are retained as tags, without inventing a patch version. If the uv installation root cannot be queried, uv-discovered records remain unconfirmed rather than being asserted as uv-managed. See [tool-discovery.md](tool-discovery.md) for supported queries and limitations.

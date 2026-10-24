@@ -26,6 +26,8 @@ import {
 import { call, chooseDirectory } from "./bridge";
 import {
   displayDate,
+  groupTools,
+  managerLabels,
   executableStep,
   relatedProjects,
   statusLabel,
@@ -188,6 +190,7 @@ export function App() {
   const environment = data.environments.find((e) => e.id === env);
   const inventory = data.inventories.find((i) => i.environment === env);
   const tools = inventory?.tools ?? [];
+  const toolGroups = groupTools(tools, search, includeApps);
   const projects = data.projects.filter((p) => p.environment === env);
   const project = projects.find((p) => p.id === projectId);
   const projectUpdates = data.updates.filter(
@@ -712,167 +715,197 @@ export function App() {
                   「再調査」で管理ツールとランタイムを取得します。
                 </Empty>
               ) : (
-                <section className="panel">
-                  {tools.length ? (
-                    <div className="table-scroll">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>ツール</th>
-                            <th>バージョン</th>
-                            <th>管理元</th>
-                            <th>状態</th>
-                            <th>配置と利用関係</th>
-                            <th>更新</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tools
-                            .filter(
-                              (t) => includeApps || t.manager !== "winget",
-                            )
-                            .filter((t) =>
-                              `${t.name} ${t.version} ${t.manager}`
-                                .toLowerCase()
-                                .includes(search.toLowerCase()),
-                            )
-                            .map((t) => {
-                              const related = relatedProjects(t, projects);
-                              const update = toolUpdates.find(
-                                (u) => u.tool_id === t.id,
-                              );
-                              return (
-                                <tr key={t.id}>
-                                  <td>
-                                    <div className="tool-name">
-                                      <Code2 size={18} />
-                                      <strong>{t.name}</strong>
-                                    </div>
-                                  </td>
-                                  <td>
-                                    <code>{t.version}</code>
-                                    {t.manager === "rustup" && (
-                                      <small>{t.requested}</small>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <span className="manager-label">
-                                      {t.manager}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <Badge
-                                      status={
-                                        !t.installed
-                                          ? "missing"
-                                          : t.active
-                                            ? "ok"
-                                            : "partial"
-                                      }
-                                    >
-                                      {!t.installed
-                                        ? "未導入"
-                                        : t.active
-                                          ? "既定の環境で有効"
-                                          : "インストール済み"}
-                                    </Badge>
-                                  </td>
-                                  <td>
-                                    <details>
-                                      <summary>
-                                        {related.length
-                                          ? `${related.length}プロジェクトに関連する宣言`
-                                          : "配置・参照情報"}
-                                      </summary>
-                                      <p className="path">
-                                        {t.path || "配置先は未取得"}
-                                      </p>
-                                      {t.source && (
-                                        <p className="path">
-                                          設定元: {t.source} / 指定:{" "}
-                                          {t.requested}
-                                        </p>
+                <div className="manager-groups">
+                  {toolGroups.length ? (
+                    toolGroups.map(([manager, rows]) => (
+                      <section
+                        className="panel manager-group"
+                        key={manager}
+                        aria-label={managerLabels[manager] ?? `${manager} 管理`}
+                      >
+                        <header className="manager-group-heading">
+                          <h2>{managerLabels[manager] ?? `${manager} 管理`}</h2>
+                          <span>{rows.length}件</span>
+                        </header>
+                        {manager === "python-launcher" && (
+                          <p className="muted manager-group-note">
+                            pyが認識するPythonです。旧ランチャーは導入・更新の管理元ではないため、登録情報として表示します。
+                          </p>
+                        )}
+                        <div className="table-scroll">
+                          <table
+                            aria-label={
+                              managerLabels[manager] ?? `${manager} 管理`
+                            }
+                          >
+                            <thead>
+                              <tr>
+                                <th>ツール</th>
+                                <th>バージョン</th>
+                                <th>状態</th>
+                                <th>配置と利用関係</th>
+                                <th>更新</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((t) => {
+                                const related = relatedProjects(t, projects);
+                                const update = toolUpdates.find(
+                                  (u) => u.tool_id === t.id,
+                                );
+                                return (
+                                  <tr key={t.id}>
+                                    <td>
+                                      <div className="tool-name">
+                                        <Code2 size={18} />
+                                        <strong>{t.name}</strong>
+                                      </div>
+                                    </td>
+                                    <td>
+                                      <code>{t.version || "未取得"}</code>
+                                      {t.manager === "rustup" && (
+                                        <small>{t.requested}</small>
                                       )}
-                                      <p className="preserve">{t.note}</p>
-                                      {related.map((p) => (
-                                        <button
-                                          className="text-button"
-                                          key={p.id}
-                                          onClick={() => {
-                                            setProjectId(p.id);
-                                            setPage("projects");
-                                          }}
-                                        >
-                                          {p.name}
-                                          <ArrowRight size={13} />
-                                        </button>
-                                      ))}
-                                      <p className="muted">
-                                        名前・宣言・仮想環境の版による関連候補です。実行確認や完全な未使用判定ではありません。
-                                      </p>
-                                      {t.manager === "mise" &&
-                                        t.installed &&
-                                        !t.active && (
-                                          <button
-                                            className="text-button danger"
-                                            disabled={!!busy}
-                                            onClick={() =>
-                                              act(
-                                                "削除前の利用先を確認中",
-                                                "plan_cleanup",
-                                                {
-                                                  environment: env,
-                                                  tool: t.id,
-                                                },
-                                                openPlan,
-                                              )
-                                            }
-                                          >
-                                            旧版の削除可否を確認
-                                          </button>
-                                        )}
-                                    </details>
-                                  </td>
-                                  <td>
-                                    {update?.candidate ? (
-                                      <button
-                                        disabled={!!busy}
-                                        onClick={() =>
-                                          act(
-                                            "導入計画を作成中",
-                                            "plan_tool",
-                                            { environment: env, tool: t.id },
-                                            openPlan,
-                                          )
+                                    </td>
+                                    <td>
+                                      <Badge
+                                        status={
+                                          !t.installed
+                                            ? "missing"
+                                            : t.active
+                                              ? "ok"
+                                              : "partial"
                                         }
                                       >
-                                        {update.candidate} の導入計画
-                                      </button>
-                                    ) : (
-                                      <span
-                                        className="muted"
-                                        title={update?.note}
-                                      >
-                                        {update
-                                          ? update.importance === "unknown"
-                                            ? "照合失敗 / 未対応"
-                                            : "更新候補なし"
-                                          : "未照合"}
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
+                                        {!t.installed
+                                          ? "未導入"
+                                          : t.active
+                                            ? "既定の環境で有効"
+                                            : "インストール済み"}
+                                      </Badge>
+                                    </td>
+                                    <td>
+                                      <details>
+                                        <summary>
+                                          {related.length
+                                            ? `${related.length}プロジェクトに関連する宣言`
+                                            : "配置・参照情報"}
+                                        </summary>
+                                        <p className="path">
+                                          {t.path || "配置先は未取得"}
+                                        </p>
+                                        {(t.source || t.requested) && (
+                                          <p className="path">
+                                            {t.source && (
+                                              <>参照元: {t.source} / </>
+                                            )}
+                                            指定・登録タグ:{" "}
+                                            {t.requested || "未取得"}
+                                          </p>
+                                        )}
+                                        <p className="preserve">{t.note}</p>
+                                        {related.map((p) => (
+                                          <button
+                                            className="text-button"
+                                            key={p.id}
+                                            onClick={() => {
+                                              setProjectId(p.id);
+                                              setPage("projects");
+                                            }}
+                                          >
+                                            {p.name}
+                                            <ArrowRight size={13} />
+                                          </button>
+                                        ))}
+                                        <p className="muted">
+                                          名前・宣言・仮想環境の版による関連候補です。実行確認や完全な未使用判定ではありません。
+                                        </p>
+                                        {t.manager === "mise" &&
+                                          t.installed &&
+                                          !t.active && (
+                                            <button
+                                              className="text-button danger"
+                                              disabled={!!busy}
+                                              onClick={() =>
+                                                act(
+                                                  "削除前の利用先を確認中",
+                                                  "plan_cleanup",
+                                                  {
+                                                    environment: env,
+                                                    tool: t.id,
+                                                  },
+                                                  openPlan,
+                                                )
+                                              }
+                                            >
+                                              旧版の削除可否を確認
+                                            </button>
+                                          )}
+                                      </details>
+                                    </td>
+                                    <td>
+                                      {![
+                                        "mise",
+                                        "uv",
+                                        "rustup",
+                                        "winget",
+                                      ].includes(t.manager) ? (
+                                        <span className="muted">
+                                          一覧取得のみ
+                                        </span>
+                                      ) : update?.candidate ? (
+                                        <button
+                                          disabled={!!busy}
+                                          onClick={() =>
+                                            act(
+                                              "導入計画を作成中",
+                                              "plan_tool",
+                                              {
+                                                environment: env,
+                                                tool: t.id,
+                                              },
+                                              openPlan,
+                                            )
+                                          }
+                                        >
+                                          {update.candidate} の導入計画
+                                        </button>
+                                      ) : (
+                                        <span
+                                          className="muted"
+                                          title={update?.note}
+                                        >
+                                          {update
+                                            ? update.importance === "unknown"
+                                              ? "照合失敗 / 未対応"
+                                              : "更新候補なし"
+                                            : "未照合"}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    ))
                   ) : (
-                    <Empty icon={Terminal} title="管理版を取得できませんでした">
-                      下の診断で、未検出や取得失敗の理由を確認してください。
+                    <Empty
+                      icon={Terminal}
+                      title={
+                        tools.length
+                          ? "表示条件に一致するツールはありません"
+                          : "管理版を取得できませんでした"
+                      }
+                    >
+                      {tools.length
+                        ? "検索条件やアプリ表示の設定を変更してください。"
+                        : "下の診断で、未検出や取得失敗の理由を確認してください。"}
                     </Empty>
                   )}
-                </section>
+                </div>
               )}
               {inventory && (
                 <>
@@ -1805,11 +1838,31 @@ function SettingsPanel({
               value={manager}
               onChange={(e) => setManager(e.target.value)}
             >
-              {["mise", "uv", "rustup", "git", "gh", "winget", "brew"].map(
-                (n) => (
-                  <option key={n}>{n}</option>
-                ),
-              )}
+              {[
+                "mise",
+                "uv",
+                "rustup",
+                "py",
+                "pymanager",
+                "pyenv",
+                "conda",
+                "fnm",
+                "nvm",
+                "python",
+                "python3",
+                "node",
+                "java",
+                "go",
+                "dotnet",
+                "bun",
+                "deno",
+                "git",
+                "gh",
+                "winget",
+                "brew",
+              ].map((n) => (
+                <option key={n}>{n}</option>
+              ))}
             </select>
             <label className="sr-only" htmlFor="manager-path">
               実行ファイルの絶対パス

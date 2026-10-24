@@ -1,4 +1,44 @@
 import type { Project, Tool } from "./types";
+export const managerLabels: Record<string, string> = {
+  mise: "mise 管理",
+  uv: "uv 管理",
+  rustup: "rustup 管理",
+  "python-install-manager": "Python Install Manager 管理",
+  "python-launcher": "Python 登録情報（py）",
+  pyenv: "pyenv 管理",
+  conda: "Conda 管理",
+  fnm: "fnm 管理",
+  nvm: "nvm-windows 管理",
+  system: "OS 管理",
+  external: "その他・管理元未確定",
+  winget: "WinGet 管理",
+};
+export function groupTools(
+  tools: Tool[],
+  search: string,
+  includeApps: boolean,
+) {
+  const groups = new Map<string, Tool[]>();
+  const query = search.trim().toLowerCase();
+  for (const tool of tools) {
+    if (!includeApps && tool.manager === "winget") continue;
+    if (
+      !`${tool.name} ${tool.version} ${tool.manager} ${managerLabels[tool.manager] ?? ""}`
+        .toLowerCase()
+        .includes(query)
+    )
+      continue;
+    const rows = groups.get(tool.manager) ?? [];
+    rows.push(tool);
+    groups.set(tool.manager, rows);
+  }
+  const order = Object.keys(managerLabels);
+  return [...groups].sort(([a], [b]) => {
+    const rank = (name: string) =>
+      order.includes(name) ? order.indexOf(name) : order.length;
+    return rank(a) - rank(b) || a.localeCompare(b);
+  });
+}
 export function relatedProjects(tool: Tool, projects: Project[]) {
   return projects.filter(
     (p) =>

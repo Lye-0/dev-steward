@@ -1354,3 +1354,28 @@ dialog > p {
     transition: none !important;
   }
 }
+
+.manager-groups {
+  display: grid;
+  gap: 24px;
+}
+.manager-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--border, #e4e9ed);
+}
+.manager-group-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.manager-group-heading > span {
+  color: var(--muted, #6a7d88);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.manager-group-note {
+  padding: 0 24px;
+}

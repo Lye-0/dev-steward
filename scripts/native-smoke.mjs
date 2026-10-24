@@ -165,6 +165,45 @@ try {
     fullPage: true,
   });
   await page.getByRole("button", { name: "開発環境", exact: true }).click();
+  const inventory = snapshot.inventories[0];
+  const visibleManagers = [
+    ...new Set(
+      inventory.tools
+        .filter((t) => t.manager !== "winget")
+        .map((t) => t.manager),
+    ),
+  ];
+  assert.equal(
+    await page.locator(".manager-group table").count(),
+    visibleManagers.length,
+  );
+  for (const section of await page.locator(".manager-group").all()) {
+    assert.equal(await section.getByRole("heading", { level: 2 }).count(), 1);
+    assert.equal(await section.getByRole("table").count(), 1);
+  }
+  const search = page.getByRole("textbox", { name: "ツールを検索" });
+  await search.fill("uv 管理");
+  assert.equal(
+    await page.getByRole("table", { name: "uv 管理", exact: true }).count(),
+    inventory.tools.some((t) => t.manager === "uv") ? 1 : 0,
+  );
+  await search.fill("no matching manager 1234");
+  await page
+    .getByText("表示条件に一致するツールはありません", { exact: true })
+    .waitFor();
+  assert.equal(await page.locator(".manager-group table").count(), 0);
+  await search.fill("");
+  await page
+    .getByRole("checkbox", { name: "WinGetで照合できたアプリも表示" })
+    .check();
+  assert.equal(
+    await page.getByRole("table", { name: "WinGet 管理", exact: true }).count(),
+    inventory.tools.some((t) => t.manager === "winget") ? 1 : 0,
+  );
+  await page
+    .getByRole("checkbox", { name: "WinGetで照合できたアプリも表示" })
+    .uncheck();
+
   await page.screenshot({
     path: "test-results/native-environment.png",
     fullPage: true,

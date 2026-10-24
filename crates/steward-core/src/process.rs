@@ -197,22 +197,7 @@ pub fn checked(
 
 pub fn resolve(env: &Environment, name: &str) -> Option<String> {
     // Only fixed manager identifiers ever enter this shell fragment.
-    if ![
-        "mise",
-        "uv",
-        "rustup",
-        "cargo",
-        "git",
-        "gh",
-        "node",
-        "pnpm",
-        "npm",
-        "winget",
-        "dpkg-query",
-        "brew",
-    ]
-    .contains(&name)
-    {
+    if !crate::discovery::EXECUTABLES.contains(&name) {
         return None;
     }
     if env.kind == "wsl" {

@@ -232,10 +232,7 @@ impl Service {
                 }
                 for (env, name, path) in &updated.manager_overrides {
                     self.env(env)?;
-                    if !["mise", "uv", "rustup", "git", "gh", "winget", "brew"]
-                        .contains(&name.as_str())
-                        || path.is_empty()
-                    {
+                    if !crate::discovery::EXECUTABLES.contains(&name.as_str()) || path.is_empty() {
                         return Err("管理ツール指定が不正です".into());
                     }
                 }

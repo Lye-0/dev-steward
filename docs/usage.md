@@ -45,7 +45,7 @@ PR作成まで含めるには、更新計画の作成時に「検証後のコミ
 
 ## 配置と固定版
 
-「開発環境」の詳細で配置先と設定元を確認できます。関連プロジェクトは名前や宣言からの関連候補であり、実行確認とは別です。
+「開発環境」はmise・uv・rustupなど管理元ごとに別の表を表示します。検索はすべての分類に適用されます。詳細で配置先と設定元を確認できます。対応する追加の管理元と検出方法は [tool-discovery.md](tool-discovery.md) を参照してください。関連プロジェクトは名前や宣言からの関連候補であり、実行確認とは別です。
 
 「デバイスのツールと指定を揃える」で、導入済みの版へプロジェクトの指定を変更する計画を作成できます。pnpmはmiseの指定とpackageManagerを同期し、既存のdevEnginesも合わせます。Pythonはuvプロジェクトでのpin・sync、Rustはrust-toolchain.tomlを使用します。変更後は検証を実行してください。
 
@@ -76,6 +76,7 @@ cargo test -p steward-core --locked
 cargo clippy -p steward-core --all-targets --locked -- -D warnings
 cargo build -p steward-core --bin steward
 pnpm test:update
+pnpm test:discovery
 cargo build -p dev-steward
 pnpm test:e2e
 pnpm tauri build --no-bundle

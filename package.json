@@ -17,6 +17,7 @@
     "test:e2e": "node scripts/native-smoke.mjs",
     "check": "tsc --noEmit",
     "test:update": "node scripts/update-smoke.mjs",
+    "test:discovery": "node scripts/discovery-smoke.mjs",
     "format": "prettier --write src tests scripts docs *.json *.ts *.html *.yaml",
     "format:check": "prettier --check src tests scripts docs *.json *.ts *.html *.yaml"
   },
