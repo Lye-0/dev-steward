@@ -1,11 +1,21 @@
 // Real registry -> plan -> isolated branch -> dependency update -> test. No GitHub writes.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
 const root = resolve(".");
-const state = mkdtempSync(join(tmpdir(), "steward-update-"));
+// Windows TEMP may use an 8.3 alias (RUNNER~1). Match the physical path
+// used by Rust project discovery before pnpm records its virtual-store location.
+const state = realpathSync.native(
+  mkdtempSync(join(tmpdir(), "steward-update-")),
+);
 const repo = join(state, "project");
 mkdirSync(repo);
 const pins = readFileSync("mise.toml", "utf8");
@@ -63,6 +73,7 @@ call("scan_root", { environment: "local", path: repo });
 let snapshot = call("snapshot");
 const project = snapshot.projects[0];
 assert.equal(project.git_status, "");
+assert.equal(realpathSync.native(project.path), realpathSync.native(repo));
 const updates = call("check_updates", { project: project.id });
 const selected = updates.findIndex((u) => u.name === "kleur" && u.candidate);
 assert(selected >= 0, JSON.stringify(updates));
