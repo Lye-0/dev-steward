@@ -10,8 +10,22 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "title": "Dev Steward", "width": 1280, "height": 860, "minWidth": 760, "minHeight": 600 }],
-    "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self'" }
+    "windows": [
+      {
+        "title": "Dev Steward",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 760,
+        "minHeight": 600,
+        "theme": "Dark",
+        "backgroundColor": "#10161e"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    }
   },
-  "bundle": { "active": false }
+  "bundle": {
+    "active": false
+  }
 }
