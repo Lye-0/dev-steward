@@ -26,7 +26,23 @@ export function ToolUpdates({
   const choices = tools.filter((t) => t.manager !== "winget");
   const tool = choices.find((t) => t.id === selected);
   const update = updates.find((u) => u.tool_id === tool?.id);
-  const supported = tool && ["mise", "uv", "rustup"].includes(tool.manager);
+  const supported =
+    tool &&
+    [
+      "mise",
+      "uv",
+      "rustup",
+      "fnm",
+      "nvm",
+      "pyenv",
+      "python-install-manager",
+      "conda",
+    ].includes(tool.manager);
+  const ordinaryPython = /^(?:PythonCore[\\/])?3\.\d+(?:\.\d+)?$/.test(
+    tool?.requested ?? "",
+  );
+  const canPlan =
+    supported && (tool?.manager !== "python-install-manager" || ordinaryPython);
   return (
     <section
       aria-label="開発ツールの更新と整理"
@@ -46,6 +62,7 @@ export function ToolUpdates({
             {choices.map((t) => (
               <option key={t.id} value={t.id}>
                 {managerLabels[t.manager] ?? t.manager} · {t.name} {t.version}
+                {t.manager === "conda" ? ` · ${t.source}` : ""}
               </option>
             ))}
           </select>
@@ -71,12 +88,16 @@ export function ToolUpdates({
                 ? `${tool.version} → ${update.candidate}`
                 : !update
                   ? "候補は未照合です。"
-                  : update.importance === "unknown"
+                  : ["unknown", "error"].includes(update.importance)
                     ? "候補を確認できていません。詳細を確認してください。"
                     : "更新候補なし"}
           </p>
+          <p className="muted">
+            候補取得：{supported ? "対応" : "導入元の確認が必要"} ／ 更新計画：
+            {canPlan ? "対応" : "管理元で確認"}
+          </p>
           <div className="button-row">
-            {supported && (
+            {canPlan && (
               <button
                 disabled={busy || !update?.candidate}
                 onClick={() => onPlan(tool.id)}

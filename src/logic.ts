@@ -67,6 +67,11 @@ export function displayDate(value: string) {
     : "未調査";
 }
 export const statusLabel: Record<string, string> = {
+  delegated: "別の管理元で確認",
+  unsupported: "未対応",
+  "not-listed": "更新一覧に掲載なし",
+  "version-unknown": "導入版が不明",
+  major: "メジャー変更の確認",
   prepared: "作業環境確認済み",
   ok: "取得済み",
   missing: "未検出",

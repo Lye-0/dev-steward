@@ -47,7 +47,7 @@ fn tool(env: &Environment, owner: &str, name: &str, version: &str, path: &str, k
         installed: true,
         source: String::new(),
         requested: key.into(),
-        note: "検出・一覧取得に対応。更新・削除の自動実行はこの管理元では未対応です。".into(),
+        note: "検出結果です。候補照合と更新計画の対応状況は「更新」で確認できます。".into(),
     }
 }
 

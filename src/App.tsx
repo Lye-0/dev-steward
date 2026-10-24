@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
+import { SystemUpdates } from "./SystemUpdates";
 import { ToolUpdates } from "./ToolUpdates";
 import {
   UpdateTabs,
@@ -1694,6 +1695,35 @@ export function App() {
                                 </div>
                               </form>
                             )}
+                            <SystemUpdates
+                              structured={
+                                data.system_update_checks?.find(
+                                  (c) => c.environment === env,
+                                )?.structured
+                              }
+                              checkedAt={
+                                data.system_update_checks?.find(
+                                  (c) => c.environment === env,
+                                )?.checked_at
+                              }
+                              updates={(data.system_updates ?? []).filter((u) =>
+                                u.tool_id?.startsWith(`${env}:`),
+                              )}
+                              busy={!!busy}
+                              windows={environment?.os === "windows"}
+                              onPlan={(u) =>
+                                act(
+                                  "WinGetの配布情報を確認中",
+                                  "plan_system_update",
+                                  {
+                                    environment: env,
+                                    package: u.name,
+                                    candidate: u.candidate,
+                                  },
+                                  openPlan,
+                                )
+                              }
+                            />
                             {systemOutput && (
                               <details className="update-output">
                                 <summary>取得した更新一覧</summary>

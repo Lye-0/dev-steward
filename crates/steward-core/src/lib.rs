@@ -5,6 +5,7 @@ pub mod github;
 pub mod integrations;
 pub mod inventory;
 pub mod maintenance;
+pub mod manager_updates;
 pub mod models;
 pub mod pins;
 pub mod plans;

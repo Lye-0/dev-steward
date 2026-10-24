@@ -15,6 +15,47 @@ fn main() {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["list-remote"] => println!(
+            "v22.2.0
+v22.3.0 (LTS)
+v24.1.0"
+        ),
+        ["install", "--list"] => println!(
+            "  3.13.7
+  3.13.8
+  3.14.1"
+        ),
+        ["list", "--online", "--format=json", "3.14"] => {
+            println!(r#"{{"versions":[{{"tag":"3.14","sort-version":"3.14.3"}}]}}"#)
+        }
+        ["search", "--json", "python"] => {
+            println!(r#"{{"python":[{{"version":"3.12.8"}},{{"version":"3.12.9"}}]}}"#)
+        }
+        [
+            "install",
+            "--prefix",
+            _,
+            "--freeze-installed",
+            "python=3.12.9",
+            "--dry-run",
+            "--json",
+        ] => println!(
+            r#"{{"success":true,"actions":{{"LINK":[{{"name":"python","version":"3.12.9"}}]}}}}"#
+        ),
+        ["upgrade", "--disable-interactivity"] => println!(
+            "Name ID Version Available Source
+-----------------------------------------
+Example App  Example.App  1.0.0  1.1.0  winget"
+        ),
+        [
+            "show",
+            "--id",
+            "Example.App",
+            "--exact",
+            "--source",
+            "winget",
+            "--disable-interactivity",
+        ] => println!("Example.App 1.1.0"),
         ["--list-paths"] => {
             eprintln!(
                 " -3.10-64 * {}",

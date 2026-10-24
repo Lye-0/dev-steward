@@ -20,7 +20,8 @@
     "test:discovery": "node scripts/discovery-smoke.mjs",
     "test:github": "node scripts/github-smoke.mjs",
     "format": "prettier --write src tests scripts docs *.json *.ts *.html *.yaml",
-    "format:check": "prettier --check src tests scripts docs *.json *.ts *.html *.yaml"
+    "format:check": "prettier --check src tests scripts docs *.json *.ts *.html *.yaml",
+    "test:managers": "node scripts/manager-updates-smoke.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

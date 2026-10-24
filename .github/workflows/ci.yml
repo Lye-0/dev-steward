@@ -34,6 +34,7 @@ jobs:
       - run: cargo build -p steward-core --bin steward --locked
       - run: pnpm test:github
       - run: pnpm test:discovery
+      - run: pnpm test:managers
       - run: pnpm test:update
       - run: cargo build -p dev-steward --locked
       - run: pnpm test:e2e

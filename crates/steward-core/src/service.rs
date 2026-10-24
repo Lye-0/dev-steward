@@ -73,22 +73,53 @@ impl Service {
     }
     pub fn snapshot(&self) -> Result<Value, String> {
         Ok(
-            json!({"environments":self.store.list::<Environment>("environments")?,"inventories":self.store.list::<Inventory>("inventories")?,"projects":self.store.list::<Project>("projects")?,"plans":self.store.list::<Plan>("plans")?,"history":self.store.history()?,"settings":self.settings(),"updates":self.store.list::<Vec<Update>>("updates")?.into_iter().flatten().collect::<Vec<_>>(),"links":self.store.list::<Vec<Value>>("links")?.into_iter().flatten().collect::<Vec<_>>(),"github_projects":self.store.list::<crate::github::Report>("github_projects")?,"github_updates":self.store.list::<Vec<Update>>("github_updates")?.into_iter().flatten().collect::<Vec<_>>(),"github_plans":self.store.list::<crate::github::Proposal>("github_plans")?,"github_errors":self.store.list::<Vec<Finding>>("github_errors")?.into_iter().flatten().collect::<Vec<_>>(),"data_path":self.store.path,"version":env!("CARGO_PKG_VERSION")}),
+            json!({"environments":self.store.list::<Environment>("environments")?,"inventories":self.store.list::<Inventory>("inventories")?,"projects":self.store.list::<Project>("projects")?,"plans":self.store.list::<Plan>("plans")?,"history":self.store.history()?,"settings":self.settings(),"updates":self.store.list::<Vec<Update>>("updates")?.into_iter().flatten().collect::<Vec<_>>(),"links":self.store.list::<Vec<Value>>("links")?.into_iter().flatten().collect::<Vec<_>>(),"github_projects":self.store.list::<crate::github::Report>("github_projects")?,"github_updates":self.store.list::<Vec<Update>>("github_updates")?.into_iter().flatten().collect::<Vec<_>>(),"github_plans":self.store.list::<crate::github::Proposal>("github_plans")?,"system_update_checks":self.store.list::<Value>("system_update_checks")?,"system_updates":self.store.list::<Vec<Update>>("system_updates")?.into_iter().flatten().collect::<Vec<_>>(),"github_errors":self.store.list::<Vec<Finding>>("github_errors")?.into_iter().flatten().collect::<Vec<_>>(),"data_path":self.store.path,"version":env!("CARGO_PKG_VERSION")}),
         )
     }
     pub fn call(&self, method: &str, payload: Value) -> Result<Value, String> {
         let settings = self.settings();
         match method {
             "snapshot" => self.snapshot(),
-            "system_updates" => crate::integrations::system_updates(
-                &self.env(field(&payload, "environment")?)?,
-                &settings,
-            ),
-            "plan_system_update" => self.save_plan(crate::maintenance::winget(
-                &self.env(field(&payload, "environment")?)?,
-                &settings,
-                field(&payload, "package")?,
-            )?),
+            "system_updates" => {
+                let env = self.env(field(&payload, "environment")?)?;
+                let inv: Inventory = self.store.get("inventories", &env.id).unwrap_or(Inventory {
+                    environment: env.id.clone(),
+                    captured_at: now(),
+                    tools: vec![],
+                    findings: vec![],
+                    manager_paths: vec![],
+                });
+                let report = crate::manager_updates::system(&env, &settings, &inv)?;
+                let rows: Vec<Update> =
+                    serde_json::from_value(report["updates"].clone()).map_err(|e| e.to_string())?;
+                self.store.put("system_updates", &env.id, &rows)?;
+                self.store.put("system_update_checks",&env.id,&json!({"environment":env.id,"checked_at":report["checked_at"],"count":rows.len(),"structured":report["structured"]}))?;
+                Ok(report)
+            }
+            "plan_system_update" => {
+                let env = self.env(field(&payload, "environment")?)?;
+                let package = field(&payload, "package")?;
+                let candidate = payload.get("candidate").and_then(Value::as_str);
+                if let Some(candidate) = candidate {
+                    let rows: Vec<Update> = self.store.get("system_updates", &env.id)?;
+                    if !rows.iter().any(|u| {
+                        u.name == package
+                            && u.candidate == candidate
+                            && !candidate.is_empty()
+                            && u.source == "winget"
+                    }) {
+                        return Err("保存されたWinGet候補と一致しません。再取得してください".into());
+                    }
+                }
+                let mut plan = crate::maintenance::winget(&env, &settings, package)?;
+                if let Some(candidate) = candidate {
+                    plan.steps[0]
+                        .args
+                        .extend(crate::process::strings(&["--version", candidate]));
+                    plan.evidence.push(format!("選択した配布版: {candidate}"));
+                }
+                self.save_plan(plan)
+            }
             "plan_manager_update" => self.save_plan(crate::maintenance::manager_update(
                 &self.env(field(&payload, "environment")?)?,
                 &settings,

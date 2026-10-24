@@ -26,6 +26,7 @@ export function UpdateCandidates({
     ({ update: u, kind }) =>
       (scope === "environment"
         ? kind === "tool" &&
+          u.manager !== "winget" &&
           data.inventories.some(
             (inv) =>
               inv.environment === environment &&
@@ -33,7 +34,12 @@ export function UpdateCandidates({
           )
         : kind !== "tool") &&
       (filter === "all" || filter === kind) &&
-      !!(u.candidate || u.vulnerabilities.length || u.importance === "unknown"),
+      (scope === "environment" ||
+        !!(
+          u.candidate ||
+          u.vulnerabilities.length ||
+          ["unknown", "error"].includes(u.importance)
+        )),
   );
   return (
     <section className="panel details-panel">
@@ -104,10 +110,27 @@ export function UpdateCandidates({
                       <small className="path">{u.source}</small>
                     </td>
                     <td>
-                      {u.current || "未確定"} → {u.candidate || "未確定"}
+                      {u.current || "版不明"} →{" "}
+                      {u.candidate ||
+                        (u.importance === "current"
+                          ? "候補なし"
+                          : "候補未取得")}
                     </td>
                     <td>
-                      {statusLabel[u.importance] ?? u.importance}
+                      {u.importance === "unknown" && kind === "tool"
+                        ? [
+                            "mise",
+                            "uv",
+                            "rustup",
+                            "fnm",
+                            "nvm",
+                            "pyenv",
+                            "conda",
+                            "python-install-manager",
+                          ].includes(u.manager)
+                          ? "照合失敗・要再照合"
+                          : "別の管理元で確認"
+                        : (statusLabel[u.importance] ?? u.importance)}
                       <small>{u.note}</small>
                       {u.vulnerabilities.map((v) => (
                         <small key={v.id}>{v.id}</small>
@@ -134,7 +157,9 @@ export function UpdateCandidates({
                               })
                         }
                       >
-                        対象を確認して計画
+                        {kind === "tool" && !u.candidate
+                          ? "状況を確認"
+                          : "対象を確認して計画"}
                       </button>
                     </td>
                   </tr>

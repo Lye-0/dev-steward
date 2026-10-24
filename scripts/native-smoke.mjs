@@ -498,6 +498,43 @@ try {
   isolatedDb
     .prepare("INSERT INTO records VALUES (?,?,?)")
     .run("environments", simulated.id, JSON.stringify(simulated));
+  const managerFixture = join(temp, "manager updates fixture.exe");
+  execFileSync(
+    join(process.env.USERPROFILE, ".cargo/bin/rustc.exe"),
+    [
+      "--edition=2024",
+      "scripts/fixtures/discovery-cli.rs",
+      "-o",
+      managerFixture,
+    ],
+    { windowsHide: true, stdio: "pipe" },
+  );
+  const systemFixtureState = await native("snapshot");
+  const localInv = systemFixtureState.inventories.find(
+    (i) => i.environment === "local",
+  );
+  localInv.tools.push({
+    id: "local:winget:Example.App",
+    environment: "local",
+    manager: "winget",
+    name: "Example.App",
+    version: "1.0.0",
+    path: "",
+    source: "winget",
+    requested: "Example.App",
+    installed: true,
+    active: false,
+    note: "Fixture",
+  });
+  isolatedDb
+    .prepare("INSERT OR REPLACE INTO records VALUES (?,?,?)")
+    .run("inventories", "local", JSON.stringify(localInv));
+  systemFixtureState.settings.manager_overrides.push([
+    "local",
+    "winget",
+    managerFixture,
+  ]);
+  await native("save_settings", systemFixtureState.settings);
   isolatedDb.close();
   // Refresh through a read-only operation, then change comparison scope without hiding the project.
   await page
@@ -660,6 +697,30 @@ try {
   await page
     .getByLabel("更新するWinGetパッケージID", { exact: true })
     .waitFor();
+  await page
+    .getByRole("button", { name: "更新一覧を取得", exact: true })
+    .click();
+  const systemTable = page.getByRole("table", {
+    name: "OS・アプリの更新候補",
+    exact: true,
+  });
+  await systemTable.waitFor();
+  assert.equal(
+    await systemTable.getByRole("cell", { name: /^Example.App/ }).count(),
+    1,
+  );
+  await systemTable
+    .getByRole("button", { name: "この候補の計画を作成", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "WinGet: Example.App の更新", exact: true })
+    .waitFor();
+  const savedSystemPlan = (await native("snapshot")).plans.find(
+    (p) => p.title === "WinGet: Example.App の更新",
+  );
+  assert(savedSystemPlan.steps[0].args.includes("1.1.0"));
+  assert(savedSystemPlan.steps[0].args.includes("--version"));
+  await page.getByRole("tab", { name: "環境の更新", exact: true }).click();
   await page.getByRole("tab", { name: "開発ツール", exact: true }).click();
   const candidateTab = page.getByRole("tab", {
     name: "環境の更新",

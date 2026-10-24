@@ -108,6 +108,13 @@ export interface History {
   detail: string;
 }
 export interface Snapshot {
+  system_updates?: Update[];
+  system_update_checks?: {
+    environment: string;
+    checked_at: string;
+    count: number;
+    structured?: boolean;
+  }[];
   github_projects: GithubReport[];
   github_updates: Update[];
   github_plans: GithubProposal[];

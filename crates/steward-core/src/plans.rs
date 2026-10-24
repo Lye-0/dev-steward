@@ -324,6 +324,16 @@ pub fn tool(
     if update.candidate.is_empty() || update.tool_id.as_deref() != Some(&tool.id) {
         return Err("有効な更新候補がありません".into());
     }
+    let valid = tool_numeric(&tool.version)
+        .zip(tool_numeric(&update.candidate))
+        .is_some_and(|(a, b)| {
+            b > a
+                && crate::updates::compatible(&a, &b)
+                && (tool.name != "python" || a.minor == b.minor)
+        });
+    if !valid {
+        return Err("同じ系列の新しい安定版ではありません".into());
+    }
     let mut plan = base(
         env,
         None,
@@ -353,6 +363,75 @@ pub fn tool(
                 "clippy",
             ]),
         ),
+        "fnm" | "nvm" | "pyenv" => {
+            if crate::updates::numeric(&update.candidate).is_none() {
+                return Err("候補版が不正です".into());
+            }
+            (
+                crate::manager_updates::executable(env, settings, &tool.manager)?,
+                strings(&["install", &update.candidate]),
+            )
+        }
+        "python-install-manager" => {
+            if !crate::manager_updates::standard_python_tag(&tool.requested) {
+                return Err(
+                    "通常のPythonCore以外の配布・アーキテクチャは、管理元で更新してください".into(),
+                );
+            }
+            plan.reason="Python Install Managerで指定版を更新します。既存の同系列ランタイムが置き換わる場合があります。".into();
+            plan.warnings.push("同系列の導入済みランタイムに加えた変更は失われる場合があります。管理元の更新仕様を確認してください。".into());
+            (
+                crate::manager_updates::executable(env, settings, "pymanager")?,
+                strings(&["install", "--update", &update.candidate]),
+            )
+        }
+        "conda" => {
+            let prefix = projects::safe_path(env, &tool.source)?;
+            let conda = crate::manager_updates::executable(env, settings, "conda")?;
+            let package = if tool.name == "node" {
+                "nodejs"
+            } else {
+                tool.name.as_str()
+            };
+            let spec = format!("{}={}", package, update.candidate);
+            let preview = checked(
+                env,
+                &conda,
+                &[
+                    "install",
+                    "--prefix",
+                    &prefix,
+                    "--freeze-installed",
+                    &spec,
+                    "--dry-run",
+                    "--json",
+                ],
+                &env.home,
+            )?;
+            let solution: serde_json::Value = serde_json::from_str(&preview)
+                .map_err(|e| format!("Condaの解決結果を確認できません: {e}"))?;
+            if solution["success"] != true {
+                return Err("Condaの依存解決が成功していません".into());
+            }
+            plan.evidence.push(crate::redact::output(&preview));
+            plan.reason =
+                "選択したConda環境のパッケージを更新します。既存環境の内容が変わります。".into();
+            plan.warnings.push(
+                "Condaの依存解決結果を確認してください。実行時に解決結果が変わる場合があります。"
+                    .into(),
+            );
+            (
+                conda,
+                strings(&[
+                    "install",
+                    "--prefix",
+                    &prefix,
+                    "--freeze-installed",
+                    &spec,
+                    "--yes",
+                ]),
+            )
+        }
         _ => return Err("この管理元の更新実行は未対応です".into()),
     };
     plan.steps.push(step(
@@ -367,17 +446,62 @@ pub fn tool(
         "{} {} → {}",
         tool.name, tool.version, update.candidate
     ));
-    plan.warnings.push(
+    if ["conda", "python-install-manager"].contains(&tool.manager.as_str()) {
+        plan.steps[0].label = "選択した環境を管理元で更新".into();
+        plan.warnings.push(
+            "既存ランタイムが更新されます。利用するプロジェクトの実行検証が必要です。".into(),
+        );
+    } else {
+        plan.warnings.push(
         "プロジェクトの固定版は引き続き旧版を使います。移行検証前に旧版を削除しないでください。"
             .into(),
     );
+    }
     Ok(plan)
 }
 
 pub fn tool_updates(env: &Environment, settings: &Settings, inventory: &Inventory) -> Vec<Update> {
     let mut result = vec![];
-    for tool in inventory.tools.iter().filter(|t| t.installed) {
+    for tool in inventory
+        .tools
+        .iter()
+        .filter(|t| t.installed && t.manager != "winget")
+    {
+        if ![
+            "mise",
+            "uv",
+            "rustup",
+            "fnm",
+            "nvm",
+            "pyenv",
+            "python-install-manager",
+            "conda",
+        ]
+        .contains(&tool.manager.as_str())
+        {
+            result.push(crate::manager_updates::outcome(
+                tool,
+                "delegated",
+                "",
+                match tool.manager.as_str() {
+                    "python-launcher" => {
+                        "ランチャーの登録情報です。実際の導入元から更新してください。"
+                    }
+                    "system" => "OSの管理対象です。OS・アプリの更新一覧で確認してください。",
+                    _ => {
+                        "導入元の確認が必要です。アプリ同梱なら配布元アプリの更新で扱ってください。"
+                    }
+                },
+            ));
+            continue;
+        }
         let Some(current) = tool_numeric(&tool.version) else {
+            result.push(crate::manager_updates::outcome(
+                tool,
+                "error",
+                "",
+                "導入版を数値として確認できません。候補なしとは判定していません",
+            ));
             continue;
         };
         let latest: Result<String, String> = (|| match tool.manager.as_str() {
@@ -443,7 +567,7 @@ pub fn tool_updates(env: &Environment, settings: &Settings, inventory: &Inventor
                     .map(str::to_string)
                     .ok_or_else(|| "Rust配布情報の形式に未対応です".into())
             }
-            _ => Err("OS・別の配布元の管理です。この経路では更新しません。".into()),
+            _ => crate::manager_updates::additional(env, settings, tool),
         })();
         let (candidate, latest, importance, note) = match latest {
             Ok(latest) => {
@@ -456,7 +580,7 @@ pub fn tool_updates(env: &Environment, settings: &Settings, inventory: &Inventor
                         candidate: String::new(),
                         latest,
                         source: tool.path.clone(),
-                        importance: "unknown".into(),
+                        importance: "error".into(),
                         vulnerabilities: vec![],
                         audit_status: "未監査".into(),
                         note: "配布元の版を解析できませんでした".into(),
@@ -481,8 +605,8 @@ pub fn tool_updates(env: &Environment, settings: &Settings, inventory: &Inventor
             Err(e) => (
                 String::new(),
                 String::new(),
-                "unknown".into(),
-                format!("照合失敗または未対応：{e}"),
+                "error".into(),
+                format!("候補の取得失敗：{}", crate::redact::output(&e)),
             ),
         };
         result.push(Update {
