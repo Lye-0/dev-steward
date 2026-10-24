@@ -1677,3 +1677,18 @@ input::placeholder {
     min-width: 160px;
   }
 }
+
+.tool-update-controls {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+}
+.tool-update-selection {
+  padding: 16px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.tool-update-selection .path {
+  overflow-wrap: anywhere;
+}

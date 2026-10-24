@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
+import { ToolUpdates } from "./ToolUpdates";
 import { UpdateTabs } from "./UpdateTabs";
 import { ProjectCatalog } from "./ProjectCatalog";
 import {
@@ -160,6 +161,14 @@ export function App() {
   const [pr, setPr] = useState<unknown>(null);
   const [systemOutput, setSystemOutput] = useState("");
   const [systemPackage, setSystemPackage] = useState("");
+  const [updateToolId, setUpdateToolId] = useState("");
+  const [updateTargetRequest, setUpdateTargetRequest] = useState(0);
+  useEffect(() => {
+    if (!updateTargetRequest) return;
+    const target = document.getElementById("environment-update-controls");
+    target?.scrollIntoView({ block: "start" });
+    target?.focus({ preventScroll: true });
+  }, [updateTargetRequest]);
   const operation = useRef(false);
   const refreshSequence = useRef(0);
   async function refresh() {
@@ -318,6 +327,17 @@ export function App() {
       </small>
     </form>
   );
+  function openToolUpdates(environmentId: string, toolId = "") {
+    setEnv(environmentId);
+    setUpdateToolId(toolId);
+    setUpdateTargetRequest((value) => value + 1);
+    const tool = data.inventories
+      .find((i) => i.environment === environmentId)
+      ?.tools.find((t) => t.id === toolId);
+    setSystemPackage(tool?.manager === "winget" ? tool.name : "");
+    setUpdateView("candidates");
+    setPage("plans");
+  }
   function openPlan(p: Plan) {
     setPlanId(p.id);
     setStaticPlanId("");
@@ -522,6 +542,8 @@ export function App() {
                 value={env}
                 onChange={(e) => {
                   setEnv(e.target.value);
+                  setSystemPackage("");
+                  setUpdateToolId("");
                 }}
               >
                 {data.environments.length ? (
@@ -788,16 +810,9 @@ export function App() {
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
-                <button
-                  disabled={!!busy || !inventory}
-                  onClick={() =>
-                    act("ツールの更新候補を照合中", "check_tool_updates", {
-                      environment: env,
-                    })
-                  }
-                >
+                <button disabled={!!busy} onClick={() => openToolUpdates(env)}>
                   <ArrowDownToLine size={16} />
-                  更新候補を照合
+                  この環境の更新へ
                 </button>
               </div>
               {!inventory ? (
@@ -912,44 +927,24 @@ export function App() {
                                         </button>
                                       </td>
                                       <td>
-                                        {![
-                                          "mise",
-                                          "uv",
-                                          "rustup",
-                                          "winget",
-                                        ].includes(t.manager) ? (
-                                          <span className="muted">
-                                            一覧取得のみ
-                                          </span>
-                                        ) : update?.candidate ? (
-                                          <button
-                                            disabled={!!busy}
-                                            onClick={() =>
-                                              act(
-                                                "導入計画を作成中",
-                                                "plan_tool",
-                                                {
-                                                  environment: env,
-                                                  tool: t.id,
-                                                },
-                                                openPlan,
-                                              )
-                                            }
-                                          >
-                                            {update.candidate} の導入計画
-                                          </button>
-                                        ) : (
-                                          <span
-                                            className="muted"
-                                            title={update?.note}
-                                          >
-                                            {update
+                                        <button
+                                          disabled={!!busy}
+                                          onClick={() =>
+                                            openToolUpdates(env, t.id)
+                                          }
+                                          aria-label={`${t.name} ${t.version}の更新・整理へ`}
+                                        >
+                                          更新・整理へ
+                                        </button>
+                                        <small>
+                                          {update?.candidate
+                                            ? `候補 ${update.candidate}`
+                                            : update
                                               ? update.importance === "unknown"
-                                                ? "照合失敗 / 未対応"
-                                                : "更新候補なし"
+                                                ? "照合失敗／未対応"
+                                                : "照合済み"
                                               : "未照合"}
-                                          </span>
-                                        )}
+                                        </small>
                                       </td>
                                     </tr>
                                     <tr
@@ -992,27 +987,6 @@ export function App() {
                                           <p className="muted">
                                             名前・宣言・仮想環境の版による関連候補です。実行確認や完全な未使用判定ではありません。
                                           </p>
-                                          {t.manager === "mise" &&
-                                            t.installed &&
-                                            !t.active && (
-                                              <button
-                                                className="text-button danger"
-                                                disabled={!!busy}
-                                                onClick={() =>
-                                                  act(
-                                                    "削除前の利用先を確認中",
-                                                    "plan_cleanup",
-                                                    {
-                                                      environment: env,
-                                                      tool: t.id,
-                                                    },
-                                                    openPlan,
-                                                  )
-                                                }
-                                              >
-                                                旧版の削除可否を確認
-                                              </button>
-                                            )}
                                         </div>
                                       </td>
                                     </tr>
@@ -1082,16 +1056,9 @@ export function App() {
                               <td>
                                 <button
                                   disabled={!!busy}
-                                  onClick={() =>
-                                    act(
-                                      "WinGetの配布情報を確認中",
-                                      "plan_system_update",
-                                      { environment: env, package: t.name },
-                                      openPlan,
-                                    )
-                                  }
+                                  onClick={() => openToolUpdates(env, t.id)}
                                 >
-                                  更新を計画
+                                  更新へ
                                 </button>
                               </td>
                             </tr>
@@ -1125,14 +1092,6 @@ export function App() {
                   </details>
                 </>
               )}
-              <button
-                onClick={() => {
-                  setUpdateView("candidates");
-                  setPage("plans");
-                }}
-              >
-                この環境の更新へ <ArrowRight size={16} />
-              </button>
             </>
           )}
           {page === "projects" && (
@@ -1606,14 +1565,16 @@ export function App() {
                     <UpdateCandidates
                       data={data}
                       onProject={openProject}
-                      onEnvironment={(id) => {
-                        setEnv(id);
-                        setPage("environment");
-                      }}
+                      onEnvironment={openToolUpdates}
                     />
 
-                    <section className="panel details-panel">
-                      <h2>OS・アプリ管理元の更新</h2>
+                    <section
+                      className="panel details-panel"
+                      id="environment-update-controls"
+                      tabIndex={-1}
+                      aria-label="環境の更新操作"
+                    >
+                      <h2>環境の更新操作</h2>
                       <div className="maintenance-target">
                         <label htmlFor="maintenance-environment">
                           更新操作の対象環境
@@ -1625,6 +1586,7 @@ export function App() {
                           onChange={(e) => {
                             setEnv(e.target.value);
                             setSystemPackage("");
+                            setUpdateToolId("");
                           }}
                         >
                           {data.environments.map((e) => (
@@ -1634,6 +1596,39 @@ export function App() {
                           ))}
                         </select>
                       </div>
+                      <ToolUpdates
+                        tools={tools}
+                        updates={toolUpdates}
+                        selected={updateToolId}
+                        busy={!!busy}
+                        scanned={!!inventory}
+                        windows={environment?.os === "windows"}
+                        onSelect={setUpdateToolId}
+                        onCheck={() =>
+                          act(
+                            "ツールの更新候補を照合中",
+                            "check_tool_updates",
+                            { environment: env },
+                          )
+                        }
+                        onPlan={(tool) =>
+                          act(
+                            "導入計画を作成中",
+                            "plan_tool",
+                            { environment: env, tool },
+                            openPlan,
+                          )
+                        }
+                        onCleanup={(tool) =>
+                          act(
+                            "削除前の利用先を確認中",
+                            "plan_cleanup",
+                            { environment: env, tool },
+                            openPlan,
+                          )
+                        }
+                      />
+                      <h3>OS・アプリ管理元の更新</h3>
                       <p className="muted">
                         WinGetやAPTの更新一覧を取得します。OS用Pythonやアプリ同梱ランタイムを直接削除しません。
                       </p>

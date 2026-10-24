@@ -9,7 +9,7 @@ export function UpdateCandidates({
 }: {
   data: Snapshot;
   onProject: (target: ProjectTarget) => void;
-  onEnvironment: (id: string) => void;
+  onEnvironment: (id: string, toolId: string) => void;
 }) {
   const [filter, setFilter] = useState("all");
   const rows = [
@@ -107,7 +107,10 @@ export function UpdateCandidates({
                         }
                         onClick={() =>
                           kind === "tool"
-                            ? onEnvironment(inventory!.environment)
+                            ? onEnvironment(
+                                inventory!.environment,
+                                u.tool_id ?? "",
+                              )
                             : onProject({
                                 kind: kind === "github" ? "github" : "local",
                                 id: u.project_id!,
@@ -125,7 +128,7 @@ export function UpdateCandidates({
         </div>
       ) : (
         <p className="muted padded">
-          保存済みの更新候補はありません。環境・ツール、またはプロジェクトで調査・照合してください。未調査の対象が最新であるという判定ではありません。
+          保存済みの更新候補はありません。環境を調査してここで照合するか、プロジェクトで依存を照合してください。未調査の対象が最新であるという判定ではありません。
         </p>
       )}
     </section>

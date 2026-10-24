@@ -567,6 +567,82 @@ try {
       .count(),
     0,
   );
+  // Each tool carries its exact environment and installed version into Updates.
+  const installed = (await native("snapshot")).inventories
+    .find((i) => i.environment === "local")
+    .tools.find((t) => t.manager === "mise" && t.installed);
+  assert(installed);
+  await page
+    .getByRole("combobox", { name: "操作する環境", exact: true })
+    .selectOption("local");
+  assert.equal(
+    await page
+      .getByRole("button", { name: "更新候補を照合", exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByRole("button", {
+      name: `${installed.name} ${installed.version}の更新・整理へ`,
+      exact: true,
+    })
+    .click();
+  assert.equal(
+    await page.getByLabel("更新操作の対象環境", { exact: true }).inputValue(),
+    "local",
+  );
+  assert.equal(
+    await page.getByLabel("更新・整理するツール", { exact: true }).inputValue(),
+    installed.id,
+  );
+  assert.equal(
+    await page
+      .getByRole("navigation", { name: "メインナビゲーション" })
+      .locator('[aria-current="page"]')
+      .getAttribute("aria-label"),
+    "更新",
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "ツールの更新候補を照合", exact: true })
+      .count(),
+    1,
+  );
+  // Changing the operation environment must drop a tool chosen in another environment.
+  await page
+    .getByLabel("更新操作の対象環境", { exact: true })
+    .selectOption(simulated.id);
+  assert.equal(
+    await page.getByLabel("更新・整理するツール", { exact: true }).inputValue(),
+    "",
+  );
+  // WinGet paths carry the package ID, and only open the review screen.
+  const winget = (await native("snapshot")).inventories
+    .find((i) => i.environment === "local")
+    .tools.find((t) => t.manager === "winget");
+  if (winget) {
+    await page
+      .getByRole("button", { name: "環境・ツール", exact: true })
+      .click();
+    await page
+      .getByRole("combobox", { name: "操作する環境", exact: true })
+      .selectOption("local");
+    await page
+      .getByRole("row")
+      .filter({ hasText: winget.name })
+      .getByRole("button", { name: "更新へ", exact: true })
+      .click();
+    assert.equal(
+      await page
+        .getByLabel("更新するWinGetパッケージID", { exact: true })
+        .inputValue(),
+      winget.name,
+    );
+  }
+  await page.getByRole("button", { name: "環境・ツール", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "操作する環境", exact: true })
+    .selectOption(simulated.id);
   await page
     .getByRole("button", { name: "この環境の更新へ", exact: true })
     .click();
