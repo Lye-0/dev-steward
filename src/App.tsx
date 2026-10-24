@@ -14,7 +14,6 @@ import {
   GitFork,
   Layers3,
   ListChecks,
-  LoaderCircle,
   Monitor,
   RefreshCw,
   Search,
@@ -25,6 +24,8 @@ import {
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
+import { Feedback } from "./Feedback";
+import { HistoryPanel } from "./HistoryPanel";
 import { SystemUpdates } from "./SystemUpdates";
 import { ToolUpdates } from "./ToolUpdates";
 import {
@@ -165,6 +166,7 @@ export function App() {
   const [cloneReportId, setCloneReportId] = useState("");
   const [clonedProjectId, setClonedProjectId] = useState("");
   const [pr, setPr] = useState<unknown>(null);
+  const [resultTitle, setResultTitle] = useState("取得した情報");
   const [systemOutput, setSystemOutput] = useState("");
   const [systemPackage, setSystemPackage] = useState("");
   const [updateToolId, setUpdateToolId] = useState("");
@@ -214,10 +216,14 @@ export function App() {
     setConfirmed(false);
     setPinTool("");
     setDependencyQuery("");
-  }, [projectId, planId]);
+    setPublish(false);
+  }, [projectId]);
+  useEffect(
+    () => setConfirmed(false),
+    [page, updateView, planId, staticPlanId],
+  );
   useEffect(() => {
     setSearch("");
-    setSelected([]);
   }, [env]);
   useEffect(() => {
     if (!busy) return;
@@ -236,6 +242,10 @@ export function App() {
   const wingetRows = groupTools(wingetTools, search, true)[0]?.[1] ?? [];
   const projects = data.projects;
   const project = projects.find((p) => p.id === projectId);
+  useEffect(() => {
+    setChecks([]);
+    setSelected([]);
+  }, [project?.fingerprint]);
   const projectTools =
     data.inventories.find((i) => i.environment === project?.environment)
       ?.tools ?? [];
@@ -246,7 +256,7 @@ export function App() {
   const toolUpdates = data.updates.filter(
     (u) => u.tool_id && tools.some((t) => t.id === u.tool_id),
   );
-  const plans = data.plans.sort((a, b) =>
+  const plans = [...data.plans].sort((a, b) =>
     b.created_at.localeCompare(a.created_at),
   );
   const plan = plans.find((p) => p.id === planId);
@@ -260,6 +270,7 @@ export function App() {
     if (target.kind === "local") setProjectId(target.id);
     else setGithubReportId(target.id);
     setPage("projects");
+    returnToList("project-detail");
   }
   useEffect(() => {
     if (
@@ -271,10 +282,39 @@ export function App() {
     section?.scrollIntoView({ block: "start" });
     section?.focus({ preventScroll: true });
   }, [page, projectKind, projectId, githubReportId]);
+  useEffect(() => {
+    if (page !== "plans" || updateView !== "plans" || !(planId || staticPlanId))
+      return;
+    const detail = document.getElementById("update-plan-detail");
+    detail?.scrollIntoView({ block: "start" });
+    detail?.focus({ preventScroll: true });
+  }, [planId, staticPlanId]);
   const toggle = (list: string[], value: string, set: (s: string[]) => void) =>
     set(
       list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
     );
+  function returnToList(id: string) {
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      el?.scrollIntoView({ block: "start" });
+      el?.focus({ preventScroll: true });
+    });
+  }
+  function navigate(destination: Page) {
+    setPage(destination);
+    setError("");
+    setNotice("");
+  }
+  const feedback = (
+    <Feedback
+      busy={busy}
+      error={error}
+      notice={notice}
+      onDismissError={() => setError("")}
+      onDismissNotice={() => setNotice("")}
+      onCancel={() => call("cancel").catch((e) => setError(String(e)))}
+    />
+  );
   const rootForm = (
     <form
       className="root-form"
@@ -486,8 +526,9 @@ export function App() {
               key={id}
               className={page === id ? "nav-item selected" : "nav-item"}
               aria-label={label}
+              title={label}
               aria-current={page === id ? "page" : undefined}
-              onClick={() => setPage(id)}
+              onClick={() => navigate(id)}
             >
               <Icon size={19} />
               <span>{label}</span>
@@ -502,8 +543,9 @@ export function App() {
             <button
               className={`nav-item ${page === "history" ? "selected" : ""}`}
               aria-label="履歴"
+              title="履歴"
               aria-current={page === "history" ? "page" : undefined}
-              onClick={() => setPage("history")}
+              onClick={() => navigate("history")}
             >
               <Clock3 size={19} />
               <span>履歴</span>
@@ -511,8 +553,9 @@ export function App() {
             <button
               className={`nav-item ${page === "settings" ? "selected" : ""}`}
               aria-label="設定"
+              title="設定"
               aria-current={page === "settings" ? "page" : undefined}
-              onClick={() => setPage("settings")}
+              onClick={() => navigate("settings")}
             >
               <Settings2 size={19} />
               <span>設定</span>
@@ -547,7 +590,7 @@ export function App() {
                 {page === "projects"
                   ? "比較・登録する環境"
                   : page === "settings"
-                    ? "設定対象の環境"
+                    ? "管理ツール設定の対象環境"
                     : "操作する環境"}
               </label>
               <select
@@ -574,41 +617,7 @@ export function App() {
           )}
         </header>
         <main id="main-content">
-          <div className="feedback" aria-live="polite">
-            {busy && (
-              <div className="busy">
-                <LoaderCircle className="spin" size={17} />
-                {busy}…
-                {busy === "工程を実行中" && (
-                  <button
-                    onClick={() =>
-                      call("cancel").catch((e) => setError(String(e)))
-                    }
-                  >
-                    中断する
-                  </button>
-                )}
-              </div>
-            )}
-            {error && (
-              <div role="alert" className="error">
-                <strong>操作を完了できませんでした</strong>
-                <span>{error}</span>
-                <button
-                  aria-label="エラーを閉じる"
-                  onClick={() => setError("")}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-            {notice && (
-              <div className="notice">
-                <Check size={17} />
-                {notice}
-              </div>
-            )}
-          </div>
+          {github === null && pr === null && feedback}
           {page === "overview" && (
             <>
               <div className="page-heading">
@@ -766,7 +775,7 @@ export function App() {
                   <h2>最近の操作</h2>
                   <button
                     className="text-button"
-                    onClick={() => setPage("history")}
+                    onClick={() => navigate("history")}
                   >
                     すべて見る
                     <ArrowRight size={14} />
@@ -988,7 +997,6 @@ export function App() {
                                               key={p.id}
                                               onClick={() => {
                                                 setProjectKind("local");
-                                                setProjectKind("local");
                                                 setProjectId(p.id);
                                                 setPage("projects");
                                               }}
@@ -1165,6 +1173,12 @@ export function App() {
                         <section className="panel details-panel">
                           <div className="section-heading">
                             <div>
+                              <button
+                                className="text-button"
+                                onClick={() => returnToList("project-catalog")}
+                              >
+                                プロジェクト一覧へ戻る
+                              </button>
                               <h2>{project.name}</h2>
                               {project.id === clonedProjectId &&
                                 staticPlan?.report_id === cloneReportId && (
@@ -1236,7 +1250,10 @@ export function App() {
                                   "PRとCIの状態を確認中",
                                   "pr_checks",
                                   { project: project.id },
-                                  setPr,
+                                  (result) => {
+                                    setResultTitle("PR・CIの確認結果");
+                                    setPr(result);
+                                  },
                                 )
                               }
                             >
@@ -1249,7 +1266,10 @@ export function App() {
                                   "差分を取得中",
                                   "project_diff",
                                   { project: project.id },
-                                  setPr,
+                                  (result) => {
+                                    setResultTitle("プロジェクトの変更差分");
+                                    setPr(result);
+                                  },
                                 )
                               }
                             >
@@ -1336,7 +1356,10 @@ export function App() {
                                 "プロジェクトの有効版を確認中",
                                 "effective_tools",
                                 { project: project.id },
-                                setPr,
+                                (result) => {
+                                  setResultTitle("この場所で有効なツール");
+                                  setPr(result);
+                                },
                               )
                             }
                           >
@@ -1344,7 +1367,9 @@ export function App() {
                           </button>
                         </section>
                         <section className="panel details-panel">
-                          <h3>検証スクリプト</h3>
+                          <h3 id="project-checks" tabIndex={-1}>
+                            検証スクリプト
+                          </h3>
                           <div className="check-row">
                             {project.scripts
                               .filter((s) =>
@@ -1420,9 +1445,26 @@ export function App() {
                                 />
                                 検証後のコミット・プッシュ・PR作成も計画に含める
                               </label>
+                              {publish && !checks.length && (
+                                <p className="muted">
+                                  PR作成には検証が必要です。
+                                  <button
+                                    className="text-button"
+                                    onClick={() =>
+                                      returnToList("project-checks")
+                                    }
+                                  >
+                                    検証スクリプトを選ぶ
+                                  </button>
+                                </p>
+                              )}
                               <button
                                 className="primary"
-                                disabled={!!busy || !selected.length}
+                                disabled={
+                                  !!busy ||
+                                  !selected.length ||
+                                  (publish && !checks.length)
+                                }
                                 onClick={() =>
                                   act(
                                     "更新計画を作成中",
@@ -1552,7 +1594,10 @@ export function App() {
                     busy={!!busy}
                     act={act}
                     selected={githubReportId}
-                    onClose={() => setGithubReportId("")}
+                    onClose={() => {
+                      setGithubReportId("");
+                      returnToList("project-catalog");
+                    }}
                     onProposal={openProposal}
                   />
                 )}
@@ -1797,145 +1842,182 @@ export function App() {
                           setStaticPlanId("");
                         }
                         setConfirmed(false);
+                        returnToList("update-plan-detail");
                       }}
                     />
-                    {staticPlan && (
-                      <StaticProposal
-                        data={data}
-                        plan={staticPlan}
-                        busy={!!busy}
-                        onProject={openProject}
-                        onClone={() => openGithub(staticPlan.report_id)}
-                        onPrepare={(proposal, project) =>
-                          act(
-                            "対象コミットとローカル状態を再確認中",
-                            "prepare_github_proposal",
-                            { proposal, project },
-                            (p) => {
-                              openProject({ kind: "local", id: p.id });
-                              setNotice(
-                                "対象コミットと作業状態を確認しました。依存を照合し、実施する検証を選んで実行計画を作成してください。",
-                              );
-                            },
-                          )
-                        }
-                      />
-                    )}
-                    {!staticPlanId && plan && (
-                      <>
-                        <section className="panel details-panel">
-                          <div className="section-heading">
-                            <div>
-                              <h2>{plan.title}</h2>
-                              <p>{plan.reason}</p>
-                              <p className="muted">
-                                実行計画 · 対象環境:{" "}
-                                {data.environments.find(
-                                  (e) => e.id === plan.environment,
-                                )?.name ?? plan.environment}
-                              </p>
+                    <section
+                      id="update-plan-detail"
+                      tabIndex={-1}
+                      role="region"
+                      aria-label="選択した計画の詳細"
+                    >
+                      {(staticPlan || plan) && (
+                        <button
+                          className="text-button"
+                          onClick={() => returnToList("plan-catalog")}
+                        >
+                          計画一覧へ戻る
+                        </button>
+                      )}
+                      {staticPlan && (
+                        <StaticProposal
+                          data={data}
+                          plan={staticPlan}
+                          busy={!!busy}
+                          onProject={openProject}
+                          onClone={() => openGithub(staticPlan.report_id)}
+                          onPrepare={(proposal, project) =>
+                            act(
+                              "対象コミットとローカル状態を再確認中",
+                              "prepare_github_proposal",
+                              { proposal, project },
+                              (p) => {
+                                openProject({ kind: "local", id: p.id });
+                                setNotice(
+                                  "対象コミットと作業状態を確認しました。依存を照合し、実施する検証を選んで実行計画を作成してください。",
+                                );
+                              },
+                            )
+                          }
+                        />
+                      )}
+                      {!staticPlanId && plan && (
+                        <>
+                          <section className="panel details-panel">
+                            <div className="section-heading">
+                              <div>
+                                <h2>{plan.title}</h2>
+                                <p>{plan.reason}</p>
+                                <p className="muted">
+                                  実行計画 · 対象環境:{" "}
+                                  {data.environments.find(
+                                    (e) => e.id === plan.environment,
+                                  )?.name ?? plan.environment}
+                                </p>
+                              </div>
+                              <Badge status={plan.status} />
                             </div>
-                            <Badge status={plan.status} />
-                          </div>
-                          {plan.evidence.map((e, i) =>
-                            e.length > 240 ||
-                            e.split("\n").length > 3 ||
-                            e.startsWith("配布情報:") ? (
-                              <details className="evidence-detail" key={i}>
-                                <summary>配布情報・取得結果の詳細</summary>
-                                <pre>{e}</pre>
-                              </details>
-                            ) : (
-                              <p className="evidence" key={i}>
-                                <Check size={15} />
-                                {e}
-                              </p>
-                            ),
+                            {plan.evidence.map((e, i) =>
+                              e.length > 240 ||
+                              e.split("\n").length > 3 ||
+                              e.startsWith("配布情報:") ? (
+                                <details className="evidence-detail" key={i}>
+                                  <summary>配布情報・取得結果の詳細</summary>
+                                  <pre>{e}</pre>
+                                </details>
+                              ) : (
+                                <p className="evidence" key={i}>
+                                  <Check size={15} />
+                                  {e}
+                                </p>
+                              ),
+                            )}
+                            <div className="plan-warnings">
+                              {plan.warnings.map((w, i) => (
+                                <p key={i}>
+                                  <CircleHelp size={15} />
+                                  {w}
+                                </p>
+                              ))}
+                            </div>
+                          </section>
+                          {next >= 0 && (
+                            <section className="execution-confirm">
+                              <div className="next-step-preview">
+                                <h3>次の工程：{plan.steps[next].label}</h3>
+                                <p className="path">
+                                  実行場所：{plan.steps[next].cwd}
+                                </p>
+                                <pre>
+                                  {[
+                                    plan.steps[next].program,
+                                    ...plan.steps[next].args.map((a) =>
+                                      JSON.stringify(a),
+                                    ),
+                                  ].join(" ")}
+                                </pre>
+                              </div>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={confirmed}
+                                  onChange={(e) =>
+                                    setConfirmed(e.target.checked)
+                                  }
+                                />
+                                「{plan.steps[next].label}
+                                」の対象・コマンドと影響を確認しました
+                              </label>
+                              <button
+                                className="primary"
+                                disabled={!!busy || !confirmed}
+                                onClick={() =>
+                                  act(
+                                    "工程を実行中",
+                                    "execute_step",
+                                    { plan: plan.id, confirmed: true },
+                                    () => setConfirmed(false),
+                                  )
+                                }
+                              >
+                                次の工程を実行
+                                <ArrowRight size={16} />
+                              </button>
+                            </section>
                           )}
-                          <div className="plan-warnings">
-                            {plan.warnings.map((w, i) => (
-                              <p key={i}>
-                                <CircleHelp size={15} />
-                                {w}
-                              </p>
+                          <div className="steps">
+                            {plan.steps.map((s, i) => (
+                              <section
+                                key={s.id}
+                                className={`panel execution-step ${s.status}`}
+                              >
+                                <div className="step-title">
+                                  <span className="step-number">
+                                    {s.status === "success" ? (
+                                      <Check size={17} />
+                                    ) : (
+                                      String(i + 1).padStart(2, "0")
+                                    )}
+                                  </span>
+                                  <h3>{s.label}</h3>
+                                  <Badge status={s.status} />
+                                </div>
+                                <p className="path">実行場所: {s.cwd}</p>
+                                <pre>
+                                  {[
+                                    s.program,
+                                    ...s.args.map((a) => JSON.stringify(a)),
+                                  ].join(" ")}
+                                </pre>
+                                {s.output && (
+                                  <details open={s.status === "failed"}>
+                                    <summary>実行結果</summary>
+                                    <pre>{s.output}</pre>
+                                  </details>
+                                )}
+                              </section>
                             ))}
                           </div>
-                        </section>
-                        <div className="steps">
-                          {plan.steps.map((s, i) => (
-                            <section
-                              key={s.id}
-                              className={`panel execution-step ${s.status}`}
-                            >
-                              <div className="step-title">
-                                <span className="step-number">
-                                  {s.status === "success" ? (
-                                    <Check size={17} />
-                                  ) : (
-                                    String(i + 1).padStart(2, "0")
-                                  )}
-                                </span>
-                                <h3>{s.label}</h3>
-                                <Badge status={s.status} />
-                              </div>
-                              <p className="path">実行場所: {s.cwd}</p>
-                              <pre>
-                                {[
-                                  s.program,
-                                  ...s.args.map((a) => JSON.stringify(a)),
-                                ].join(" ")}
-                              </pre>
-                              {s.output && (
-                                <details open={s.status === "failed"}>
-                                  <summary>実行結果</summary>
-                                  <pre>{s.output}</pre>
-                                </details>
-                              )}
-                            </section>
-                          ))}
-                        </div>
-                        {next >= 0 && (
-                          <section className="execution-confirm">
-                            <label>
-                              <input
-                                type="checkbox"
-                                checked={confirmed}
-                                onChange={(e) => setConfirmed(e.target.checked)}
-                              />
-                              「{plan.steps[next].label}
-                              」の対象・コマンドと影響を確認しました
-                            </label>
-                            <button
-                              className="primary"
-                              disabled={!!busy || !confirmed}
-                              onClick={() =>
-                                act(
-                                  "工程を実行中",
-                                  "execute_step",
-                                  { plan: plan.id, confirmed: true },
-                                  () => setConfirmed(false),
-                                )
-                              }
-                            >
-                              次の工程を実行
-                              <ArrowRight size={16} />
-                            </button>
-                          </section>
-                        )}
-                        {[
-                          "failed",
-                          "cancelled",
-                          "interrupted",
-                          "outdated",
-                        ].includes(plan.status) && (
-                          <p className="warning-note">
-                            {plan.status === "outdated"
-                              ? "対象の現在の状態を再確認し、計画を作り直してください。"
-                              : "結果を確認し、対象を再調査して再計画してください。失敗した操作を自動で繰り返しません。"}
-                          </p>
-                        )}
-                      </>
-                    )}
+                          {[
+                            "failed",
+                            "cancelled",
+                            "interrupted",
+                            "outdated",
+                          ].includes(plan.status) && (
+                            <p className="warning-note">
+                              {plan.status === "outdated"
+                                ? "対象の現在の状態を再確認し、計画を作り直してください。"
+                                : "結果を確認し、対象を再調査して再計画してください。失敗した操作を自動で繰り返しません。"}
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {!(staticPlan || plan) && (
+                        <p className="muted padded">
+                          一覧から計画を選択すると、内容と実行手順を確認できます。
+                        </p>
+                      )}
+                    </section>
                   </>
                 )}
               </section>
@@ -1953,20 +2035,7 @@ export function App() {
                   操作すると、結果と実行日時がここに記録されます。
                 </Empty>
               ) : (
-                <section className="panel">
-                  {data.history.map((h) => (
-                    <details className="history-row" key={h.id}>
-                      <summary>
-                        <Clock3 size={16} />
-                        <strong>{h.action}</strong>
-                        <span>{h.target}</span>
-                        <Badge status={h.status} />
-                        <time>{displayDate(h.at)}</time>
-                      </summary>
-                      <pre>{h.detail}</pre>
-                    </details>
-                  ))}
-                </section>
+                <HistoryPanel items={data.history} />
               )}
             </>
           )}
@@ -1980,11 +2049,13 @@ export function App() {
               <SettingsPanel
                 settings={data.settings}
                 env={env}
+                environments={data.environments}
                 busy={!!busy}
-                save={(s) =>
-                  act("設定を保存中", "save_settings", s, () =>
-                    setNotice("設定を保存しました"),
-                  )
+                save={(s, after) =>
+                  act("設定を保存中", "save_settings", s, () => {
+                    setNotice("設定を保存しました");
+                    after?.();
+                  })
                 }
                 detect={() =>
                   act("利用可能な環境を検出中", "detect_environments")
@@ -2038,8 +2109,13 @@ export function App() {
       {github !== null && (
         <Modal
           title="GitHubからプロジェクトを登録"
-          close={() => setGitFork(null)}
+          close={() => {
+            setGitFork(null);
+            setError("");
+            setNotice("");
+          }}
         >
+          {feedback}
           <p>
             GitHub
             CLIで認証したアカウントのリポジトリ（最大300件）です。必要なファイルだけを調査するか、クローンして作業するか選べます。
@@ -2188,9 +2264,19 @@ export function App() {
         </Modal>
       )}
       {pr !== null && (
-        <Modal title="取得した情報" close={() => setPr(null)}>
+        <Modal
+          title={resultTitle}
+          close={() => {
+            setPr(null);
+            setError("");
+            setNotice("");
+          }}
+        >
+          {feedback}
           <p>
-            取得した時点の情報です。PR・CIの結果では、対象コミット（headRefOid）も確認してください。
+            {resultTitle === "PR・CIの確認結果"
+              ? "取得した時点の結果です。対象コミット（headRefOid）も確認してください。"
+              : "選択したプロジェクトで取得した時点の情報です。"}
           </p>
           <pre>{typeof pr === "string" ? pr : JSON.stringify(pr, null, 2)}</pre>
         </Modal>
@@ -2250,6 +2336,7 @@ function Modal({
 function SettingsPanel({
   settings,
   env,
+  environments,
   busy,
   save,
   detect,
@@ -2257,13 +2344,24 @@ function SettingsPanel({
 }: {
   settings: Settings;
   env: string;
+  environments: Snapshot["environments"];
   busy: boolean;
-  save: (s: Settings) => void;
+  save: (s: Settings, after?: () => void) => void;
   detect: () => void;
   mcp: (path: string) => void;
 }) {
   const [manager, setManager] = useState("mise");
-  const [path, setPath] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draftKey = `${env}:${manager}`;
+  const storedPath =
+    settings.manager_overrides.find(
+      ([e, n]) => e === env && n === manager,
+    )?.[2] ?? "";
+  const path = drafts[draftKey] ?? storedPath;
+  const setPath = (value: string) =>
+    setDrafts((d) => ({ ...d, [draftKey]: value }));
+  const dirty = path !== storedPath;
+  const environmentName = environments.find((e) => e.id === env)?.name ?? env;
   const [config, setConfig] = useState("");
   return (
     <>
@@ -2278,6 +2376,9 @@ function SettingsPanel({
       </section>
       <section className="panel details-panel">
         <h2>管理ツールの実行ファイル</h2>
+        <p>
+          対象環境：<strong>{environmentName}</strong>
+        </p>
         <p className="muted">
           自動検出できないときに、現在選択している環境の絶対パスを指定します。指定先は実行されるため、信頼できる管理ツールを選んでください。
         </p>
@@ -2293,7 +2394,6 @@ function SettingsPanel({
                 [env, manager, path],
               ],
             });
-            setPath("");
           }}
         >
           <div className="input-row">
@@ -2341,35 +2441,52 @@ function SettingsPanel({
               onChange={(e) => setPath(e.target.value)}
               placeholder="実行ファイルの絶対パス"
             />
-            <button disabled={busy || !path}>保存</button>
+            <button disabled={busy || !path || !dirty}>保存</button>
           </div>
         </form>
-        {settings.manager_overrides.map(([e, n, p]) => (
-          <div className="override" key={`${e}-${n}`}>
-            <span>
-              <strong>
-                {e} / {n}
-              </strong>
-              <small className="path">{p}</small>
-            </span>
-            <button
-              disabled={busy}
-              onClick={() =>
-                save({
-                  ...settings,
-                  manager_overrides: settings.manager_overrides.filter(
-                    ([ee, nn]) => ee !== e || nn !== n,
-                  ),
-                })
-              }
-            >
-              自動検出に戻す
-            </button>
-          </div>
-        ))}
+        <p className="muted" role="status">
+          {dirty
+            ? "未保存の変更があります。保存すると適用されます。"
+            : storedPath
+              ? "保存済みの指定です。"
+              : "自動検出を使用しています。"}
+        </p>
+        {settings.manager_overrides
+          .filter(([e]) => e === env)
+          .map(([e, n, p]) => (
+            <div className="override" key={`${e}-${n}`}>
+              <span>
+                <strong>
+                  {environmentName} / {n}
+                </strong>
+                <small className="path">{p}</small>
+              </span>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  save(
+                    {
+                      ...settings,
+                      manager_overrides: settings.manager_overrides.filter(
+                        ([ee, nn]) => ee !== e || nn !== n,
+                      ),
+                    },
+                    () =>
+                      setDrafts((d) => {
+                        const next = { ...d };
+                        delete next[`${e}:${n}`];
+                        return next;
+                      }),
+                  )
+                }
+              >
+                自動検出に戻す
+              </button>
+            </div>
+          ))}
       </section>
       <section className="panel details-panel">
-        <h2>MCP起動設定の調査</h2>
+        <h2>MCP起動設定の調査（このデバイス）</h2>
         <p className="muted">
           ローカルのJSON・TOML設定から起動コマンドだけを取得します。環境変数・トークン・コマンド引数は保存しません。サーバーへの接続確認は行いません。
         </p>
@@ -2397,7 +2514,7 @@ function SettingsPanel({
           <ShieldCheck size={17} /> 同一メジャーの安定版を優先（0.xは同一minor）
         </p>
         <p className="muted">
-          Python本体は同一minorの修正版を候補にします。メジャー更新、自動マージ、自動削除は有効になっていません。
+          Python本体は同一minorの修正版を候補にします。OS・アプリは管理元の候補と変更内容を確認して選びます。マージや削除は自動で実行しません。
         </p>
         <h3>登録した調査フォルダー</h3>
         {settings.roots.length ? (

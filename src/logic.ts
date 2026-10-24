@@ -78,6 +78,7 @@ export const statusLabel: Record<string, string> = {
   major: "メジャー変更の確認",
   outdated: "再計画が必要",
   prepared: "作業環境確認済み",
+  draft: "実行環境の確認前",
   ok: "取得済み",
   missing: "未検出",
   error: "取得失敗",

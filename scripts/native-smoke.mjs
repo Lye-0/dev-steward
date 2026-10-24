@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
+import { reviewUi } from "./ui-review-smoke.mjs";
 const root = resolve(".");
 const temp = mkdtempSync(join(tmpdir(), "steward-native-"));
 const fixture = join(temp, "repository with spaces");
@@ -985,6 +986,7 @@ try {
   await page
     .getByRole("heading", { name: "更新方針 （静的な計画）", exact: false })
     .waitFor();
+  await reviewUi({ page, native, cloneParent });
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
     JSON.stringify(

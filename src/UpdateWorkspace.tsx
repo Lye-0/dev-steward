@@ -186,6 +186,8 @@ export function PlanCatalog({
   onSelect: (target: { kind: "local" | "github"; id: string }) => void;
 }) {
   const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState("all");
   const entries = [
     ...data.plans.map((p) => ({
       id: p.id,
@@ -209,9 +211,21 @@ export function PlanCatalog({
     })),
   ]
     .sort((a, b) => b.date.localeCompare(a.date))
-    .filter((p) => filter === "all" || p.kind === filter);
+    .filter(
+      (p) =>
+        (filter === "all" || p.kind === filter) &&
+        `${p.title} ${p.target}`.toLowerCase().includes(query.toLowerCase()) &&
+        (stateFilter === "all" ||
+          (stateFilter === "attention"
+            ? ["failed", "cancelled", "interrupted", "outdated"].includes(
+                p.status,
+              )
+            : stateFilter === "active"
+              ? ["draft", "prepared", "ready", "running"].includes(p.status)
+              : ["complete", "success"].includes(p.status))),
+    );
   return (
-    <section className="panel details-panel">
+    <section className="panel details-panel" id="plan-catalog" tabIndex={-1}>
       <div className="section-heading">
         <h2>計画・進行状況</h2>
         <select
@@ -224,6 +238,48 @@ export function PlanCatalog({
           <option value="github">静的な更新方針</option>
         </select>
       </div>
+      <div className="toolbar catalog-filterbar">
+        <div className="search">
+          <input
+            aria-label="計画を検索"
+            placeholder="計画名・環境・コミットで検索"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <select
+          aria-label="計画の状態で絞り込み"
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value)}
+        >
+          <option value="all">すべての状態</option>
+          <option value="active">未完了・実行中</option>
+          <option value="attention">失敗・再確認が必要</option>
+          <option value="complete">完了</option>
+        </select>
+      </div>
+      <p className="muted">
+        表示 {entries.length}件／全
+        {data.plans.length + data.github_plans.length}件
+      </p>
+      {selected.id &&
+        !entries.some(
+          (p) => p.id === selected.id && p.kind === selected.kind,
+        ) && (
+          <p className="muted">
+            選択中の計画は絞り込み条件に含まれません。詳細は引き続き表示しています。
+            <button
+              className="text-button"
+              onClick={() => {
+                setFilter("all");
+                setQuery("");
+                setStateFilter("all");
+              }}
+            >
+              絞り込みを解除
+            </button>
+          </p>
+        )}
       {entries.length ? (
         <div className="plan-catalog">
           {entries.map((p) => (
@@ -254,7 +310,9 @@ export function PlanCatalog({
         </div>
       ) : (
         <p className="muted padded">
-          対象を調査・照合してから計画を作成してください。
+          {data.plans.length + data.github_plans.length
+            ? "条件に一致する計画はありません。検索・絞り込みを変更してください。"
+            : "対象を調査・照合してから計画を作成してください。"}
         </p>
       )}
     </section>

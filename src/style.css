@@ -1774,3 +1774,135 @@ input::placeholder {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.feedback-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.feedback-message pre {
+  max-height: 240px;
+  overflow: auto;
+}
+.feedback-dismiss {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-height: 28px;
+  background: transparent;
+  border: 0;
+  padding: 3px;
+}
+.modal-heading {
+  position: sticky;
+  top: -25px;
+  z-index: 3;
+  background: var(--surface);
+  padding: 12px 0;
+}
+.modal-heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.modal-heading button {
+  flex-shrink: 0;
+}
+.history-row pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.history-target {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#project-catalog {
+  scroll-margin-top: 20px;
+}
+@media (max-width: 800px) {
+  .repo-row {
+    flex-wrap: wrap;
+  }
+  .repo-row > div {
+    flex: 1 1 210px;
+  }
+  .history-row summary {
+    flex-wrap: wrap;
+  }
+  .override {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .section-heading {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+.catalog-filterbar {
+  margin-top: 16px;
+}
+.next-step-preview {
+  grid-column: 1/-1;
+  min-width: 0;
+}
+.next-step-preview pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.execution-confirm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+}
+#update-plan-detail,
+#plan-catalog,
+#project-checks {
+  scroll-margin-top: 20px;
+}
+@media (max-width: 800px) {
+  .execution-confirm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .execution-confirm > button {
+    justify-self: start;
+  }
+  .catalog-filterbar {
+    flex-wrap: wrap;
+  }
+}
+
+.sidebar {
+  overflow-y: auto;
+}
+.sidebar > * {
+  flex-shrink: 0;
+}
+@media (max-height: 700px) {
+  .sidebar {
+    padding-block: 18px;
+  }
+  .workspace-label {
+    margin-top: 24px;
+  }
+  .local-note {
+    padding-top: 14px;
+    margin-top: 12px;
+  }
+  .sidebar nav {
+    margin-top: 12px;
+  }
+}
+
+label[for="dependency-search"] {
+  display: block;
+  margin-bottom: 8px;
+}
+#dependency-search {
+  width: 100%;
+}

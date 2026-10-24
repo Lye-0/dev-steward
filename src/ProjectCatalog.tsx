@@ -30,6 +30,8 @@ export function ProjectCatalog({
   return (
     <section
       className="panel details-panel project-catalog"
+      id="project-catalog"
+      tabIndex={-1}
       aria-label="プロジェクト一覧"
     >
       <div className="section-heading">
