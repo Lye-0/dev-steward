@@ -1,12 +1,34 @@
 // Exercise the real backend with isolated manager executables, even when none are installed.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  realpathSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir, homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, win32 } from "node:path";
 import assert from "node:assert/strict";
 
 assert.equal(process.platform, "win32", "Windows discovery fixture");
-const temporary = mkdtempSync(join(tmpdir(), "steward discovery "));
+const temporaryRoot = mkdtempSync(join(tmpdir(), "steward discovery "));
+const physical = join(temporaryRoot, "physical directory");
+const alias = join(temporaryRoot, "temporary alias");
+mkdirSync(physical);
+symlinkSync(physical, alias, "junction");
+// Rust canonicalizes existing runtime files. Use the same physical root, including
+// expansion of Windows short paths and junctions, for every fixture and assertion.
+const temporary = realpathSync.native(alias);
+function insideTemporary(path) {
+  const relative = win32.relative(temporary, path.replace(/^\\\\\?\\/, ""));
+  return (
+    relative !== "" &&
+    relative !== ".." &&
+    !relative.startsWith(`..${win32.sep}`) &&
+    !win32.isAbsolute(relative)
+  );
+}
 const fixture = join(temporary, "manager fixture.exe");
 execFileSync(
   join(homedir(), ".cargo", "bin", "rustc.exe"),
@@ -55,11 +77,9 @@ for (const manager of [
 ]) {
   assert(
     inventory.tools.some(
-      (t) =>
-        t.manager === manager &&
-        t.path.replace(/^\\\\\?\\/, "").startsWith(temporary),
+      (t) => t.manager === manager && insideTemporary(t.path),
     ),
-    manager,
+    `${manager}: expected a runtime under ${temporary}; observed ${JSON.stringify(inventory.tools.filter((t) => t.manager === manager).map((t) => t.path))}`,
   );
 }
 assert(!JSON.stringify(inventory).includes("token@private.invalid"));
@@ -79,6 +99,7 @@ console.log(
       ok: true,
       adapters: 6,
       independentOfInstalledManagers: true,
+      canonicalTemporaryRoot: true,
       missingOverrideRejected: true,
     },
     null,
