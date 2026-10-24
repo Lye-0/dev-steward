@@ -647,7 +647,7 @@ try {
     .getByRole("button", { name: "この環境の更新へ", exact: true })
     .click();
   await page
-    .getByRole("heading", { name: "OS・アプリ管理元の更新", exact: true })
+    .getByRole("heading", { name: "環境の更新操作", exact: true })
     .waitFor();
   assert.equal(
     await page.getByLabel("更新操作の対象環境", { exact: true }).inputValue(),
@@ -656,10 +656,15 @@ try {
   await page
     .getByLabel("更新操作の対象環境", { exact: true })
     .selectOption("local");
+  await page.getByRole("tab", { name: "OS・アプリ", exact: true }).click();
   await page
     .getByLabel("更新するWinGetパッケージID", { exact: true })
     .waitFor();
-  const candidateTab = page.getByRole("tab", { name: "更新候補", exact: true });
+  await page.getByRole("tab", { name: "開発ツール", exact: true }).click();
+  const candidateTab = page.getByRole("tab", {
+    name: "環境の更新",
+    exact: true,
+  });
   const planTab = page.getByRole("tab", {
     name: "計画・進行状況",
     exact: true,
@@ -681,6 +686,23 @@ try {
   }
   await candidateTab.focus();
   await candidateTab.press("ArrowRight");
+  const projectTab = page.getByRole("tab", {
+    name: "プロジェクトの更新",
+    exact: true,
+  });
+  assert.equal(await projectTab.getAttribute("aria-selected"), "true");
+  assert.equal(
+    await page
+      .getByRole("table", { name: "更新対象の一覧", exact: true })
+      .getByRole("cell", { name: /^kleur/ })
+      .count(),
+    2,
+  );
+  assert.equal(
+    await page.getByLabel("更新操作の対象環境", { exact: true }).count(),
+    0,
+  );
+  await projectTab.press("ArrowRight");
   assert.equal(await planTab.getAttribute("aria-selected"), "true");
   assert(await planTab.evaluate((el) => el === document.activeElement));
   await planTab.press("ArrowRight");
@@ -690,9 +712,71 @@ try {
   await planTab.press("Home");
   assert.equal(await candidateTab.getAttribute("aria-selected"), "true");
   assert.equal(
-    await page.getByRole("tabpanel", { name: "更新候補", exact: true }).count(),
+    await page
+      .getByRole("tabpanel", { name: "環境の更新", exact: true })
+      .count(),
     1,
   );
+  assert(
+    await page.evaluate(() => {
+      const controls = document.querySelector("#environment-update-controls");
+      const candidates = [...document.querySelectorAll("h2")].find(
+        (h) => h.textContent === "開発ツールの更新候補",
+      );
+      return (
+        !!controls &&
+        !!candidates &&
+        !!(
+          controls.compareDocumentPosition(candidates) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        )
+      );
+    }),
+    "Operations must precede candidate results regardless of result count",
+  );
+  const visibleAction = async (locator) => {
+    const box = await locator.boundingBox();
+    assert(
+      box && box.y >= 0 && box.y + box.height <= 900,
+      "Primary update action must be above the fold",
+    );
+  };
+  for (const width of [1400, 780]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByRole("tab", { name: "開発ツール", exact: true }).click();
+    await visibleAction(page.getByLabel("更新操作の対象環境", { exact: true }));
+    await visibleAction(
+      page.getByRole("button", { name: "ツールの更新候補を照合", exact: true }),
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "更新一覧を取得", exact: true })
+        .count(),
+      0,
+    );
+    await page.getByRole("tab", { name: "OS・アプリ", exact: true }).click();
+    await visibleAction(
+      page.getByRole("button", { name: "更新一覧を取得", exact: true }),
+    );
+    assert.equal(
+      await page.getByLabel("更新・整理するツール", { exact: true }).count(),
+      0,
+    );
+    await page
+      .getByRole("tab", { name: "管理ツール本体", exact: true })
+      .click();
+    await visibleAction(
+      page.getByRole("button", { name: "mise の更新を計画", exact: true }),
+    );
+    await page.getByRole("tab", { name: "開発ツール", exact: true }).click();
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+      false,
+    );
+  }
   await page.screenshot({
     path: "test-results/native-update-tabs-narrow.png",
     fullPage: true,
@@ -703,7 +787,7 @@ try {
     fullPage: true,
   });
   // Start on candidates to prove the overview shortcut chooses plans explicitly.
-  await page.getByRole("tab", { name: "更新候補", exact: true }).click();
+  await page.getByRole("tab", { name: "環境の更新", exact: true }).click();
   await page.getByRole("button", { name: "概要", exact: true }).click();
   await page
     .getByRole("button", { name: "更新計画を見る", exact: true })

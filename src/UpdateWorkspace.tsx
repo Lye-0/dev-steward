@@ -6,8 +6,12 @@ export function UpdateCandidates({
   data,
   onProject,
   onEnvironment,
+  scope,
+  environment,
 }: {
   data: Snapshot;
+  scope: "environment" | "projects";
+  environment?: string;
   onProject: (target: ProjectTarget) => void;
   onEnvironment: (id: string, toolId: string) => void;
 }) {
@@ -20,23 +24,36 @@ export function UpdateCandidates({
     ...data.github_updates.map((u) => ({ update: u, kind: "github" })),
   ].filter(
     ({ update: u, kind }) =>
+      (scope === "environment"
+        ? kind === "tool" &&
+          data.inventories.some(
+            (inv) =>
+              inv.environment === environment &&
+              inv.tools.some((t) => t.id === u.tool_id),
+          )
+        : kind !== "tool") &&
       (filter === "all" || filter === kind) &&
       !!(u.candidate || u.vulnerabilities.length || u.importance === "unknown"),
   );
   return (
     <section className="panel details-panel">
       <div className="section-heading">
-        <h2>更新候補と未確認事項</h2>
-        <select
-          aria-label="更新候補の対象"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          <option value="all">すべての対象</option>
-          <option value="tool">環境・ツール</option>
-          <option value="local">ローカルプロジェクト</option>
-          <option value="github">GitHubの調査結果</option>
-        </select>
+        <h2>
+          {scope === "environment"
+            ? "開発ツールの更新候補"
+            : "プロジェクトの更新候補"}
+        </h2>
+        {scope === "projects" && (
+          <select
+            aria-label="更新候補の対象"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">すべての対象</option>
+            <option value="local">ローカルプロジェクト</option>
+            <option value="github">GitHubの調査結果</option>
+          </select>
+        )}
       </div>
       <p className="muted">
         調査した対象環境・コミットごとの照合結果です。計画前に、対象の最新状態と検証方法を確認します。

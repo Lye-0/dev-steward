@@ -1679,9 +1679,7 @@ input::placeholder {
 }
 
 .tool-update-controls {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 24px;
-  margin-bottom: 24px;
+  margin: 0;
 }
 .tool-update-selection {
   padding: 16px;
@@ -1691,4 +1689,75 @@ input::placeholder {
 }
 .tool-update-selection .path {
   overflow-wrap: anywhere;
+}
+
+.workspace-tabs {
+  overflow-x: auto;
+}
+.workspace-tabs [role="tab"] {
+  flex-shrink: 0;
+}
+.update-categories {
+  margin-bottom: 18px;
+  gap: 4px;
+  padding: 0;
+}
+.update-categories [role="tab"] {
+  font-size: 13px;
+  min-height: 40px;
+  padding: 9px 14px;
+}
+.update-categories [role="tab"][aria-selected="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+.environment-actions > .maintenance-target {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 340px);
+  align-items: center;
+  gap: 14px;
+  max-width: 600px;
+  margin: 16px 0 22px;
+}
+.tool-update-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.tool-update-toolbar .maintenance-target {
+  flex: 1 1 260px;
+  max-width: 480px;
+  margin: 0;
+}
+.tool-update-toolbar > button {
+  margin: 0;
+}
+.environment-actions form {
+  max-width: 840px;
+  margin-top: 16px;
+}
+.environment-actions .button-row {
+  margin: 12px 0;
+}
+.update-output {
+  margin-top: 16px;
+}
+.update-output summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.update-output pre {
+  max-height: 360px;
+  overflow: auto;
+}
+@media (max-width: 600px) {
+  .environment-actions > .maintenance-target {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .update-categories [role="tab"] {
+    padding-inline: 10px;
+  }
 }

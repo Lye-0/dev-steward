@@ -33,7 +33,23 @@ export function ToolUpdates({
       className="tool-update-controls"
     >
       <h3>開発ツールの更新と整理</h3>
-      <div className="button-row">
+      <div className="tool-update-toolbar">
+        <div className="maintenance-target">
+          <label htmlFor="update-tool">更新・整理するツール</label>
+          <select
+            id="update-tool"
+            value={tool?.id ?? ""}
+            disabled={busy || !choices.length}
+            onChange={(e) => onSelect(e.target.value)}
+          >
+            <option value="">対象を選択</option>
+            {choices.map((t) => (
+              <option key={t.id} value={t.id}>
+                {managerLabels[t.manager] ?? t.manager} · {t.name} {t.version}
+              </option>
+            ))}
+          </select>
+        </div>
         <button disabled={busy || !scanned} onClick={onCheck}>
           ツールの更新候補を照合
         </button>
@@ -43,38 +59,22 @@ export function ToolUpdates({
           この環境は未調査です。「環境・ツール」で調査してください。
         </p>
       )}
-      <div className="maintenance-target">
-        <label htmlFor="update-tool">更新・整理するツール</label>
-        <select
-          id="update-tool"
-          value={tool?.id ?? ""}
-          disabled={busy || !choices.length}
-          onChange={(e) => onSelect(e.target.value)}
-        >
-          <option value="">対象を選択</option>
-          {choices.map((t) => (
-            <option key={t.id} value={t.id}>
-              {managerLabels[t.manager] ?? t.manager} · {t.name} {t.version}
-            </option>
-          ))}
-        </select>
-      </div>
       {tool && (
         <div className="tool-update-selection">
           <strong>
             {tool.name} {tool.version}
           </strong>
-          <p className="path">{tool.path || "配置先は未取得"}</p>
-          <p>
+          <p className="muted">
             {!supported
               ? "この管理元の自動更新には未対応です。"
-              : update
-                ? update.candidate
-                  ? `更新候補: ${update.candidate}`
-                  : update.note || "更新候補なし"
-                : "更新候補は未照合です。"}
+              : update?.candidate
+                ? `${tool.version} → ${update.candidate}`
+                : !update
+                  ? "候補は未照合です。"
+                  : update.importance === "unknown"
+                    ? "候補を確認できていません。詳細を確認してください。"
+                    : "更新候補なし"}
           </p>
-          {update?.candidate && <p className="muted">{update.note}</p>}
           <div className="button-row">
             {supported && (
               <button
@@ -93,6 +93,20 @@ export function ToolUpdates({
                 </button>
               )}
           </div>
+          <details className="update-output">
+            <summary>配置・候補の詳細</summary>
+            <p className="path">{tool.path || "配置先は未取得"}</p>
+            <p>
+              {!supported
+                ? "この管理元の自動更新には未対応です。"
+                : update
+                  ? update.candidate
+                    ? `更新候補: ${update.candidate}`
+                    : update.note || "更新候補なし"
+                  : "更新候補は未照合です。"}
+            </p>
+            {update?.candidate && <p className="muted">{update.note}</p>}
+          </details>
         </div>
       )}
     </section>

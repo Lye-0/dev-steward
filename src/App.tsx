@@ -26,7 +26,12 @@ import {
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
 import { ToolUpdates } from "./ToolUpdates";
-import { UpdateTabs } from "./UpdateTabs";
+import {
+  UpdateTabs,
+  EnvironmentUpdateTabs,
+  type UpdateView,
+  type EnvironmentUpdateCategory,
+} from "./UpdateTabs";
 import { ProjectCatalog } from "./ProjectCatalog";
 import {
   UpdateCandidates,
@@ -134,9 +139,9 @@ export function App() {
   const [projectKind, setProjectKind] = useState<"local" | "github">("local");
   const [githubReportId, setGithubReportId] = useState("");
   const [staticPlanId, setStaticPlanId] = useState("");
-  const [updateView, setUpdateView] = useState<"candidates" | "plans">(
-    "candidates",
-  );
+  const [updateView, setUpdateView] = useState<UpdateView>("environment");
+  const [environmentCategory, setEnvironmentCategory] =
+    useState<EnvironmentUpdateCategory>("tools");
   const [planId, setPlanId] = useState("");
   const [root, setRoot] = useState("");
   const [adding, setAdding] = useState(false);
@@ -335,7 +340,8 @@ export function App() {
       .find((i) => i.environment === environmentId)
       ?.tools.find((t) => t.id === toolId);
     setSystemPackage(tool?.manager === "winget" ? tool.name : "");
-    setUpdateView("candidates");
+    setEnvironmentCategory(tool?.manager === "winget" ? "system" : "tools");
+    setUpdateView("environment");
     setPage("plans");
   }
   function openPlan(p: Plan) {
@@ -1560,16 +1566,10 @@ export function App() {
                 aria-labelledby={`update-tab-${updateView}`}
                 tabIndex={0}
               >
-                {updateView === "candidates" ? (
+                {updateView === "environment" ? (
                   <>
-                    <UpdateCandidates
-                      data={data}
-                      onProject={openProject}
-                      onEnvironment={openToolUpdates}
-                    />
-
                     <section
-                      className="panel details-panel"
+                      className="panel details-panel environment-actions"
                       id="environment-update-controls"
                       tabIndex={-1}
                       aria-label="環境の更新操作"
@@ -1596,105 +1596,154 @@ export function App() {
                           ))}
                         </select>
                       </div>
-                      <ToolUpdates
-                        tools={tools}
-                        updates={toolUpdates}
-                        selected={updateToolId}
-                        busy={!!busy}
-                        scanned={!!inventory}
-                        windows={environment?.os === "windows"}
-                        onSelect={setUpdateToolId}
-                        onCheck={() =>
-                          act(
-                            "ツールの更新候補を照合中",
-                            "check_tool_updates",
-                            { environment: env },
-                          )
-                        }
-                        onPlan={(tool) =>
-                          act(
-                            "導入計画を作成中",
-                            "plan_tool",
-                            { environment: env, tool },
-                            openPlan,
-                          )
-                        }
-                        onCleanup={(tool) =>
-                          act(
-                            "削除前の利用先を確認中",
-                            "plan_cleanup",
-                            { environment: env, tool },
-                            openPlan,
-                          )
-                        }
+                      <EnvironmentUpdateTabs
+                        value={environmentCategory}
+                        onChange={setEnvironmentCategory}
                       />
-                      <h3>OS・アプリ管理元の更新</h3>
-                      <p className="muted">
-                        WinGetやAPTの更新一覧を取得します。OS用Pythonやアプリ同梱ランタイムを直接削除しません。
-                      </p>
-                      <button
-                        disabled={!!busy}
-                        onClick={() =>
-                          act(
-                            "システム管理元の更新を確認中",
-                            "system_updates",
-                            { environment: env },
-                            (v) => setSystemOutput(v.output),
-                          )
-                        }
+                      <section
+                        role="tabpanel"
+                        id={`environment-update-panel-${environmentCategory}`}
+                        aria-labelledby={`environment-update-tab-${environmentCategory}`}
                       >
-                        更新一覧を取得
-                      </button>
-                      {systemOutput && <pre>{systemOutput}</pre>}
-                      {environment?.os === "windows" && (
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            act(
-                              "WinGetの配布情報を確認中",
-                              "plan_system_update",
-                              { environment: env, package: systemPackage },
-                              openPlan,
-                            );
-                          }}
-                        >
-                          <label htmlFor="system-package">
-                            更新するWinGetパッケージID
-                          </label>
-                          <div className="input-row">
-                            <input
-                              id="system-package"
-                              value={systemPackage}
-                              onChange={(e) => setSystemPackage(e.target.value)}
-                              placeholder="一覧にある正確なパッケージID"
+                        {environmentCategory === "tools" ? (
+                          <>
+                            {" "}
+                            <ToolUpdates
+                              tools={tools}
+                              updates={toolUpdates}
+                              selected={updateToolId}
+                              busy={!!busy}
+                              scanned={!!inventory}
+                              windows={environment?.os === "windows"}
+                              onSelect={setUpdateToolId}
+                              onCheck={() =>
+                                act(
+                                  "ツールの更新候補を照合中",
+                                  "check_tool_updates",
+                                  { environment: env },
+                                )
+                              }
+                              onPlan={(tool) =>
+                                act(
+                                  "導入計画を作成中",
+                                  "plan_tool",
+                                  { environment: env, tool },
+                                  openPlan,
+                                )
+                              }
+                              onCleanup={(tool) =>
+                                act(
+                                  "削除前の利用先を確認中",
+                                  "plan_cleanup",
+                                  { environment: env, tool },
+                                  openPlan,
+                                )
+                              }
                             />
-                            <button disabled={!!busy || !systemPackage}>
-                              更新計画を作成
+                          </>
+                        ) : environmentCategory === "system" ? (
+                          <>
+                            {" "}
+                            <h3>OS・アプリ管理元の更新</h3>
+                            <p className="muted">
+                              WinGetやAPTの更新一覧を取得します。OS用Pythonやアプリ同梱ランタイムを直接削除しません。
+                            </p>
+                            <button
+                              disabled={!!busy}
+                              onClick={() =>
+                                act(
+                                  "システム管理元の更新を確認中",
+                                  "system_updates",
+                                  { environment: env },
+                                  (v) => setSystemOutput(v.output),
+                                )
+                              }
+                            >
+                              更新一覧を取得
                             </button>
-                          </div>
-                        </form>
-                      )}
-                      <h3>管理ツール本体の更新</h3>
-                      <div className="button-row">
-                        {["mise", "uv", "rustup"].map((manager) => (
-                          <button
-                            key={manager}
-                            disabled={!!busy}
-                            onClick={() =>
-                              act(
-                                "導入元と更新方法を確認中",
-                                "plan_manager_update",
-                                { environment: env, manager },
-                                openPlan,
-                              )
-                            }
-                          >
-                            {manager} の更新を計画
-                          </button>
-                        ))}
-                      </div>
+                            {environment?.os === "windows" && (
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  act(
+                                    "WinGetの配布情報を確認中",
+                                    "plan_system_update",
+                                    {
+                                      environment: env,
+                                      package: systemPackage,
+                                    },
+                                    openPlan,
+                                  );
+                                }}
+                              >
+                                <label htmlFor="system-package">
+                                  更新するWinGetパッケージID
+                                </label>
+                                <div className="input-row">
+                                  <input
+                                    id="system-package"
+                                    value={systemPackage}
+                                    onChange={(e) =>
+                                      setSystemPackage(e.target.value)
+                                    }
+                                    placeholder="一覧にある正確なパッケージID"
+                                  />
+                                  <button disabled={!!busy || !systemPackage}>
+                                    更新計画を作成
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+                            {systemOutput && (
+                              <details className="update-output">
+                                <summary>取得した更新一覧</summary>
+                                <pre>{systemOutput}</pre>
+                              </details>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {" "}
+                            <h3>管理ツール本体の更新</h3>
+                            <div className="button-row">
+                              {["mise", "uv", "rustup"].map((manager) => (
+                                <button
+                                  key={manager}
+                                  disabled={!!busy}
+                                  onClick={() =>
+                                    act(
+                                      "導入元と更新方法を確認中",
+                                      "plan_manager_update",
+                                      { environment: env, manager },
+                                      openPlan,
+                                    )
+                                  }
+                                >
+                                  {manager} の更新を計画
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </section>
                     </section>
+                    {environmentCategory === "tools" && (
+                      <UpdateCandidates
+                        scope="environment"
+                        environment={env}
+                        data={data}
+                        onProject={openProject}
+                        onEnvironment={openToolUpdates}
+                      />
+                    )}
                   </>
+                ) : updateView === "projects" ? (
+                  <UpdateCandidates
+                    scope="projects"
+                    data={data}
+                    onProject={openProject}
+                    onEnvironment={openToolUpdates}
+                  />
                 ) : (
                   <>
                     <PlanCatalog
