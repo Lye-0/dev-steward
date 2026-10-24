@@ -777,6 +777,51 @@ try {
       false,
     );
   }
+  // Negative child margins must not create a one-pixel vertical scroll range.
+  for (const width of [1400, 780, 480]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const label of ["更新の表示", "環境更新の分類"]) {
+      const bar = page.getByRole("tablist", { name: label, exact: true });
+      const tabs = bar.getByRole("tab");
+      const assertNoVerticalScroll = async () => {
+        const geometry = await bar.evaluate((el) => ({
+          height: el.clientHeight,
+          scroll: el.scrollHeight,
+          overflow: getComputedStyle(el).overflowY,
+        }));
+        assert(
+          geometry.scroll <= geometry.height,
+          `${label} must not have a vertical scroll range at ${width}px`,
+        );
+        assert.equal(geometry.overflow, "hidden");
+      };
+      await assertNoVerticalScroll();
+      for (let i = 0; i < (await tabs.count()); i++) {
+        await tabs.nth(i).hover();
+        await tabs.nth(i).focus();
+        await assertNoVerticalScroll();
+      }
+      const last = tabs.last();
+      await last.focus();
+      const box = await last.boundingBox(),
+        container = await bar.boundingBox();
+      assert(
+        box &&
+          container &&
+          box.x >= container.x - 1 &&
+          box.x + box.width <= container.x + container.width + 1,
+        "Focused tabs must remain reachable on narrow screens",
+      );
+    }
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+      false,
+    );
+  }
+  await page.setViewportSize({ width: 780, height: 900 });
+  await page.getByRole("tab", { name: "開発ツール", exact: true }).focus();
   await page.screenshot({
     path: "test-results/native-update-tabs-narrow.png",
     fullPage: true,

@@ -1541,6 +1541,8 @@ input::placeholder {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   gap: 4px;
   border-bottom: 1px solid var(--border);
   margin: 0 0 24px;
@@ -1551,7 +1553,7 @@ input::placeholder {
   min-width: 0;
   min-height: 46px;
   padding: 12px 20px;
-  margin-bottom: -1px;
+  margin: 0;
   border: 0;
   border-bottom: 3px solid transparent;
   border-radius: 6px 6px 0 0;
@@ -1691,9 +1693,6 @@ input::placeholder {
   overflow-wrap: anywhere;
 }
 
-.workspace-tabs {
-  overflow-x: auto;
-}
 .workspace-tabs [role="tab"] {
   flex-shrink: 0;
 }
