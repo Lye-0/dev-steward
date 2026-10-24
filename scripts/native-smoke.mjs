@@ -102,6 +102,21 @@ try {
   );
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.getByRole("heading", { name: "開発環境を、見渡す。" }).waitFor();
+  // Native customizable pickers must retain the dark theme while open.
+  mkdirSync("test-results", { recursive: true });
+  assert(await page.evaluate(() => CSS.supports("appearance", "base-select")));
+  const environmentPicker = page.getByRole("combobox", { name: "対象の環境" });
+  await environmentPicker.click();
+  assert(await environmentPicker.evaluate((el) => el.matches(":open")));
+  const pickerColors = await environmentPicker.evaluate((el) => ({
+    background: getComputedStyle(el, "::picker(select)").backgroundColor,
+    color: getComputedStyle(el, "::picker(select)").color,
+  }));
+  assert.equal(pickerColors.background, "rgb(23, 33, 44)");
+  assert.equal(pickerColors.color, "rgb(227, 237, 245)");
+  await page.screenshot({ path: "test-results/native-environment-picker.png" });
+  await page.keyboard.press("Escape");
+  assert(!(await environmentPicker.evaluate((el) => el.matches(":open"))));
   const native = (method, payload = null) =>
     page.evaluate(
       async ({ method, payload }) =>
@@ -303,6 +318,28 @@ try {
     await page.getByRole("heading", { name: "設定", exact: true }).count(),
     1,
   );
+  const managerPicker = page.getByRole("combobox", {
+    name: "管理ツール",
+    exact: true,
+  });
+  const initialManager = await managerPicker.inputValue();
+  await managerPicker.click();
+  assert(await managerPicker.evaluate((el) => el.matches(":open")));
+  await page.screenshot({ path: "test-results/native-manager-picker.png" });
+  await page.getByRole("option", { name: "uv", exact: true }).click();
+  assert.equal(await managerPicker.inputValue(), "uv");
+  await managerPicker.click();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await managerPicker.inputValue(),
+    "uv",
+    "Escape should cancel the pending selection",
+  );
+  await managerPicker.click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  assert.equal(await managerPicker.inputValue(), initialManager);
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
     JSON.stringify(

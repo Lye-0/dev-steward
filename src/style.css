@@ -116,6 +116,65 @@ option {
   color: var(--text);
   background: var(--surface);
 }
+/* Style the opened picker as well as the closed control, retaining native selection. */
+@supports (appearance: base-select) {
+  select,
+  ::picker(select) {
+    appearance: base-select;
+  }
+  select {
+    align-items: center;
+    gap: 12px;
+  }
+  ::picker(select) {
+    color-scheme: dark;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    padding: 5px;
+    margin-block-start: 6px;
+    max-height: 300px;
+    max-width: min(560px, calc(100vw - 24px));
+    overflow: auto;
+    box-shadow: 0 12px 32px #0006;
+    font-size: 12px;
+  }
+  select option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 38px;
+    padding: 9px 12px;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  select option:checked {
+    background: var(--positive-bg);
+    color: var(--positive-text);
+  }
+  select option:hover,
+  select option:focus-visible {
+    background: var(--raised);
+    color: var(--text);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  select option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent);
+  }
+  select::picker-icon {
+    color: var(--muted);
+  }
+  select:open::picker-icon {
+    transform: rotate(180deg);
+  }
+}
 input[type="checkbox"] {
   width: 17px;
   height: 17px;
