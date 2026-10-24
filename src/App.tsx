@@ -114,7 +114,6 @@ export function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [pinTool, setPinTool] = useState("");
-  const [includeApps, setIncludeApps] = useState(false);
   const [dependencyQuery, setDependencyQuery] = useState("");
   const [search, setSearch] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -190,7 +189,9 @@ export function App() {
   const environment = data.environments.find((e) => e.id === env);
   const inventory = data.inventories.find((i) => i.environment === env);
   const tools = inventory?.tools ?? [];
-  const toolGroups = groupTools(tools, search, includeApps);
+  const toolGroups = groupTools(tools, search, false);
+  const wingetTools = tools.filter((t) => t.manager === "winget");
+  const wingetRows = groupTools(wingetTools, search, true)[0]?.[1] ?? [];
   const projects = data.projects.filter((p) => p.environment === env);
   const project = projects.find((p) => p.id === projectId);
   const projectUpdates = data.updates.filter(
@@ -702,14 +703,6 @@ export function App() {
                   更新候補を照合
                 </button>
               </div>
-              <label className="app-filter">
-                <input
-                  type="checkbox"
-                  checked={includeApps}
-                  onChange={(e) => setIncludeApps(e.target.checked)}
-                />{" "}
-                WinGetで照合できたアプリも表示
-              </label>
               {!inventory ? (
                 <Empty icon={Monitor} title="この環境は未調査です">
                   「再調査」で管理ツールとランタイムを取得します。
@@ -906,6 +899,74 @@ export function App() {
                     </Empty>
                   )}
                 </div>
+              )}
+              {environment?.os === "windows" && (
+                <section
+                  className="panel winget-panel"
+                  aria-label="WinGet 管理"
+                >
+                  <header className="manager-group-heading">
+                    <h2>WinGet 管理</h2>
+                    <span>
+                      {wingetRows.length} / {wingetTools.length}件
+                    </span>
+                  </header>
+                  <p className="muted padded">
+                    WinGetで照合できたアプリを表示します。アプリの導入版と配布元を確認し、個別の更新を計画できます。
+                  </p>
+                  {!inventory ? (
+                    <p className="muted padded">
+                      この環境は未調査です。「再調査」でアプリを取得します。
+                    </p>
+                  ) : wingetRows.length ? (
+                    <div className="table-scroll capped">
+                      <table aria-label="WinGet 管理">
+                        <thead>
+                          <tr>
+                            <th>パッケージID</th>
+                            <th>インストール版</th>
+                            <th>ソース</th>
+                            <th>更新</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wingetRows.map((t) => (
+                            <tr key={t.id}>
+                              <td>
+                                <strong>{t.name}</strong>
+                              </td>
+                              <td>
+                                <code>{t.version || "不明"}</code>
+                              </td>
+                              <td>{t.source || "未取得"}</td>
+                              <td>
+                                <button
+                                  disabled={!!busy}
+                                  onClick={() =>
+                                    act(
+                                      "WinGetの配布情報を確認中",
+                                      "plan_system_update",
+                                      { environment: env, package: t.name },
+                                      openPlan,
+                                    )
+                                  }
+                                >
+                                  更新を計画
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="muted padded">
+                      {wingetTools.length
+                        ? "検索条件に一致するアプリはありません。"
+                        : "WinGetのアプリを取得できていません。下の診断で取得結果を確認してください。"}
+                    </p>
+                  )}
+                </section>
               )}
               {inventory && (
                 <>

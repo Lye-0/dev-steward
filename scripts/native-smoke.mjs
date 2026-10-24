@@ -193,17 +193,23 @@ try {
     .waitFor();
   assert.equal(await page.locator(".manager-group table").count(), 0);
   await search.fill("");
-  await page
-    .getByRole("checkbox", { name: "WinGetで照合できたアプリも表示" })
-    .check();
+  assert.equal(
+    await page
+      .getByRole("region", { name: "WinGet 管理", exact: true })
+      .count(),
+    1,
+  );
   assert.equal(
     await page.getByRole("table", { name: "WinGet 管理", exact: true }).count(),
     inventory.tools.some((t) => t.manager === "winget") ? 1 : 0,
   );
-  await page
-    .getByRole("checkbox", { name: "WinGetで照合できたアプリも表示" })
-    .uncheck();
-
+  assert.equal(
+    await page
+      .locator(".manager-groups")
+      .getByRole("table", { name: "WinGet 管理", exact: true })
+      .count(),
+    0,
+  );
   await page.screenshot({
     path: "test-results/native-environment.png",
     fullPage: true,

@@ -9,7 +9,7 @@
 | Windowsデスクトップアプリ | Tauri 2＋Rust＋React。画面を内包した実行ファイルを生成                                                                 |
 | 管理対象から独立した起動  | Node・Rust・mise等をPATHから外した状態で配布用実行ファイルの起動を確認                                                 |
 | 配置・管理元の検出        | OSホーム、PATH、管理元への問い合わせ、明示設定を使用。個人名・ドライブ・WSL名の固定なし                                |
-| 管理元別の一覧            | mise・uv・rustup等を別表で表示。検索は分類をまたいで適用、WinGetは任意表示                                             |
+| 管理元別の一覧            | mise・uv・rustup等を別表で表示。検索は分類をまたいで適用、WinGetは専用区画に常時表示                                   |
 | 追加の検出対象            | py／Python Install Manager・pyenv・Conda・fnm・nvm-windows。PATH上の主要ランタイムも取得。追加対象の更新・削除は未対応 |
 | mise・uv・rustup          | インストール版、設定元、配置を取得。Pythonランチャーの集約、OS管理Pythonの識別                                         |
 | WinGet                    | エクスポートできたインストール済みアプリと版を取得。更新一覧、個別更新計画、本体更新の導入元判定                       |
