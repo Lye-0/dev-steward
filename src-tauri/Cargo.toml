@@ -1,0 +1,17 @@
+[package]
+name = "dev-steward"
+version = "0.1.0"
+edition = "2024"
+default-run = "dev-steward"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+steward-core = { path = "../crates/steward-core" }
+serde_json = "1"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

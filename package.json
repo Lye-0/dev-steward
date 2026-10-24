@@ -1,0 +1,41 @@
+{
+  "name": "dev-steward",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development tools and project dependencies, connected.",
+  "type": "module",
+  "packageManager": "pnpm@11.28.8",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "tauri": "tauri",
+    "test": "vitest run",
+    "test:e2e": "node scripts/native-smoke.mjs",
+    "check": "tsc --noEmit",
+    "test:update": "node scripts/update-smoke.mjs",
+    "format": "prettier --write src tests scripts docs *.json *.ts *.html *.yaml",
+    "format:check": "prettier --check src tests scripts docs *.json *.ts *.html *.yaml"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "lucide-react": "^1.61.0",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56",
+    "@tauri-apps/cli": "^2.12.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
