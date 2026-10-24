@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  scrollbar-gutter: stable;
   font-family: Inter, "Segoe UI", "Noto Sans JP", sans-serif;
   color: var(--text);
   background: var(--background);
@@ -1406,4 +1407,60 @@ input::placeholder {
 ::selection {
   background: #345b50;
   color: #f3fff9;
+}
+
+/* Equal schemas share the same column geometry, independent of their contents. */
+.manager-group .runtime-table {
+  table-layout: fixed;
+  min-width: 1000px;
+}
+.runtime-col-name {
+  width: 18%;
+}
+.runtime-col-version {
+  width: 25%;
+}
+.runtime-col-status {
+  width: 19%;
+}
+.runtime-col-details {
+  width: 25%;
+}
+.runtime-col-update {
+  width: 13%;
+}
+.runtime-table td {
+  max-width: none;
+}
+.runtime-table .tool-name svg {
+  flex-shrink: 0;
+}
+.runtime-table .tool-details-toggle {
+  text-align: left;
+  justify-content: flex-start;
+}
+.tool-details-toggle svg {
+  flex-shrink: 0;
+}
+.tool-details-toggle svg.expanded {
+  transform: rotate(90deg);
+}
+.runtime-table .tool-detail-row[hidden] {
+  display: none;
+}
+.runtime-table .tool-detail-row > td {
+  padding: 0;
+}
+.tool-detail-content {
+  padding: 20px 24px;
+  background: var(--field);
+  border-left: 3px solid var(--accent);
+}
+.tool-detail-content p + p,
+.tool-detail-content p + button {
+  margin-top: 10px;
+}
+.tool-detail-content .path,
+.tool-detail-content .preserve {
+  overflow-wrap: anywhere;
 }

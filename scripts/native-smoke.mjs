@@ -210,6 +210,71 @@ try {
       .count(),
     0,
   );
+  // The same five-column schema must align across managers and survive disclosure.
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  async function geometry() {
+    return page.locator(".runtime-table").evaluateAll((tables) =>
+      tables.map((table) => ({
+        columns: [...table.querySelectorAll("thead th")].map((th) => ({
+          x: th.getBoundingClientRect().x,
+          width: th.getBoundingClientRect().width,
+        })),
+        first: [...table.querySelector("tbody tr").children].map((td) => ({
+          x: td.getBoundingClientRect().x,
+          width: td.getBoundingClientRect().width,
+        })),
+      })),
+    );
+  }
+  function aligned(actual, expected) {
+    assert.equal(actual.length, expected.length);
+    actual.forEach((column, i) => {
+      assert(Math.abs(column.x - expected[i].x) < 1, "Column start moved");
+      assert(
+        Math.abs(column.width - expected[i].width) < 1,
+        "Column width moved",
+      );
+    });
+  }
+  const before = await geometry();
+  for (const group of before) {
+    aligned(group.columns, before[0].columns);
+    aligned(group.first, group.columns);
+  }
+  const toggles = page.locator(".runtime-table .tool-details-toggle");
+  const toggle = page
+    .getByRole("table", { name: "uv 管理", exact: true })
+    .locator(".tool-details-toggle")
+    .first();
+  const selectedToggle = (await toggle.count()) ? toggle : toggles.first();
+  await selectedToggle.click();
+  assert.equal(await selectedToggle.getAttribute("aria-expanded"), "true");
+  const after = await geometry();
+  after.forEach((group, i) => {
+    aligned(group.columns, before[i].columns);
+    aligned(group.first, before[i].first);
+  });
+  const panelId = await selectedToggle.getAttribute("aria-controls");
+  const expanded = page.locator(`[id="${panelId}"]`);
+  assert(await expanded.isVisible());
+  const panel = await expanded.boundingBox();
+  const table = await selectedToggle
+    .locator("xpath=ancestor::table")
+    .boundingBox();
+  assert(
+    panel.width > table.width - 6,
+    "Detail content must use the full row width",
+  );
+  await page.screenshot({
+    path: "test-results/native-details-expanded.png",
+    fullPage: true,
+  });
+  await selectedToggle.press("Enter");
+  assert.equal(await selectedToggle.getAttribute("aria-expanded"), "false");
+  assert(!(await expanded.isVisible()));
+  (await geometry()).forEach((group, i) =>
+    aligned(group.columns, before[i].columns),
+  );
   await page.screenshot({
     path: "test-results/native-environment.png",
     fullPage: true,
@@ -219,6 +284,16 @@ try {
     path: "test-results/native-narrow.png",
     fullPage: true,
   });
+  // Bring the control into the horizontal viewport before comparing disclosure geometry.
+  // Scrolling to an initially off-screen button is distinct from a column reflow.
+  await selectedToggle.scrollIntoViewIfNeeded();
+  const narrowBefore = await geometry();
+  await selectedToggle.click();
+  const narrowAfter = await geometry();
+  narrowAfter.forEach((group, i) =>
+    aligned(group.columns, narrowBefore[i].columns),
+  );
+  await selectedToggle.click();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,
   );
