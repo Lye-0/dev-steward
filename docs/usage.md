@@ -85,3 +85,11 @@ node scripts/release-smoke.mjs
 ```
 
 通し試験は一時ディレクトリ内に独立したリポジトリとデータベースを作成します。更新試験では小さな公開パッケージを取得します。GitHubへのプッシュ・PR作成・本物のツール削除は行いません。ネイティブ試験はWindows／WebView2向けです。
+
+### Windowsのネイティブ試験の起動設定
+
+試験スクリプトは `--data-dir <独立した絶対パス> --automation-port <ポート>` を明示してアプリを起動します。通常起動ではデバッグ用ポートを有効にしません。自動試験用ポートは専用データディレクトリを指定した場合だけ受け付け、WebViewのプロファイルもその配下に分離します。
+
+管理者権限のWebView2は環境変数 `WEBVIEW2_*` の上書きを無視するため、試験用引数はWebView作成APIへ直接渡します（[Microsoftの説明](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5640)）。マシン全体のレジストリ設定を変更する必要はありません。
+
+起動前にプロセスが終了した場合は終了コードを報告し、タイムアウトでは最後の接続エラーを含めます。標準出力・標準エラーは `test-results/native-smoke-startup.log` と `test-results/release-smoke-startup.log` に保存し、CIの検証用成果物から確認できます。

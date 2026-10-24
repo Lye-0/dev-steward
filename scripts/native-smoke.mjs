@@ -1,14 +1,22 @@
 // Windows WebView2 integration test: real Tauri IPC and Rust backend, isolated data/repository.
 import { chromium } from "@playwright/test";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  realpathSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import { reviewUi } from "./ui-review-smoke.mjs";
 const root = resolve(".");
-const temp = mkdtempSync(join(tmpdir(), "steward-native-"));
+const temp = realpathSync.native(
+  mkdtempSync(join(tmpdir(), "steward-native-")),
+);
 const fixture = join(temp, "repository with spaces");
 mkdirSync(fixture);
 writeFileSync(
@@ -64,28 +72,35 @@ vite.stderr.on("data", (b) => (logs += b));
 vite.stdout.on("data", (b) => (logs += b));
 async function waitFor(fn, ms = 60000) {
   const start = Date.now();
+  let lastError;
   while (Date.now() - start < ms) {
+    if (app?.exitCode !== null && app?.exitCode !== undefined) {
+      throw new Error(
+        `Application exited before startup: ${app.exitCode}. ${logs}`,
+      );
+    }
     try {
       const x = await fn();
       if (x) return x;
-    } catch {}
+    } catch (error) {
+      lastError = error;
+    }
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw new Error(`Timed out. ${logs}`);
+  throw new Error(
+    `Timed out waiting for startup. Last error: ${lastError}. ${logs}`,
+  );
 }
 try {
   await waitFor(async () => (await fetch("http://127.0.0.1:1420")).ok);
   app = spawn(
     resolve("target/debug/dev-steward.exe"),
-    ["--data-dir", join(temp, "state")],
+    ["--data-dir", join(temp, "state"), "--automation-port", "9224"],
     {
       cwd: root,
       windowsHide: true,
       env: {
         ...process.env,
-        DEV_STEWARD_TEST_DATA_DIR: join(temp, "state"),
-        WEBVIEW2_USER_DATA_FOLDER: join(temp, "webview"),
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=9224",
       },
       stdio: "pipe",
     },
@@ -1009,6 +1024,8 @@ try {
     ),
   );
 } finally {
+  mkdirSync("test-results", { recursive: true });
+  writeFileSync("test-results/native-smoke-startup.log", logs);
   await browser?.close().catch(() => {});
   for (const child of [app, vite])
     if (child?.pid) {

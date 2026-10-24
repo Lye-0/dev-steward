@@ -1,21 +1,21 @@
 import { chromium } from "@playwright/test";
 import { spawn, execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
-const profile = mkdtempSync(join(tmpdir(), "steward-release-"));
+const profile = realpathSync.native(
+  mkdtempSync(join(tmpdir(), "steward-release-")),
+);
 const app = spawn(
   resolve("target/release/dev-steward.exe"),
-  ["--data-dir", join(profile, "state")],
+  ["--data-dir", join(profile, "state"), "--automation-port", "9225"],
   {
     windowsHide: true,
     stdio: "pipe",
     env: {
       ...process.env,
       PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`,
-      WEBVIEW2_USER_DATA_FOLDER: join(profile, "webview"),
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=9225",
     },
   },
 );
@@ -25,14 +25,24 @@ app.stderr.on("data", (b) => (logs += b));
 app.stdout.on("data", (b) => (logs += b));
 async function waitFor(fn) {
   const start = Date.now();
+  let lastError;
   while (Date.now() - start < 60000) {
+    if (app?.exitCode !== null && app?.exitCode !== undefined) {
+      throw new Error(
+        `Application exited before startup: ${app.exitCode}. ${logs}`,
+      );
+    }
     try {
       const result = await fn();
       if (result) return result;
-    } catch {}
+    } catch (error) {
+      lastError = error;
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
-  throw new Error(`Timeout: ${logs}`);
+  throw new Error(
+    `Timeout waiting for startup. Last error: ${lastError}. ${logs}`,
+  );
 }
 try {
   await waitFor(
@@ -80,6 +90,8 @@ try {
     ),
   );
 } finally {
+  mkdirSync("test-results", { recursive: true });
+  writeFileSync("test-results/release-smoke-startup.log", logs);
   await browser?.close().catch(() => {});
   try {
     execFileSync("taskkill.exe", ["/PID", String(app.pid), "/T", "/F"], {

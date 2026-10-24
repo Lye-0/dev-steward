@@ -36,6 +36,7 @@ jobs:
       - run: pnpm test:discovery
       - run: pnpm test:managers
       - run: pnpm test:update
+      - run: cargo test -p dev-steward --locked
       - run: cargo build -p dev-steward --locked
       - run: pnpm test:e2e
       - run: pnpm tauri build --no-bundle
