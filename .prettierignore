@@ -1,0 +1,8 @@
+# Package managers own generated lockfiles.
+pnpm-lock.yaml
+Cargo.lock
+node_modules/
+target/
+dist/
+src-tauri/gen/
+test-results/
