@@ -563,6 +563,76 @@ try {
     false,
     "GitHub page should not overflow horizontally",
   );
+  // Start on candidates to prove the overview shortcut chooses plans explicitly.
+  await page.getByRole("button", { name: "更新候補", exact: true }).click();
+  await page.getByRole("button", { name: "概要", exact: true }).click();
+  await page
+    .getByRole("button", { name: "更新計画を見る", exact: true })
+    .click();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "計画・進行状況", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await page
+    .locator(".plan-catalog button")
+    .filter({ hasText: "Example/monorepo" })
+    .click();
+  // Move the generated source beyond the audited revision. The clone must open the audited commit.
+  const auditedHead = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: fixture,
+    encoding: "utf8",
+    windowsHide: true,
+  }).trim();
+  execFileSync("git", ["commit", "--allow-empty", "-m", "newer source head"], {
+    cwd: fixture,
+    windowsHide: true,
+    stdio: "pipe",
+  });
+  writeFileSync(join(temp, "clone-source"), fixture);
+  const cloneParent = join(temp, "clones");
+  mkdirSync(cloneParent);
+  await page
+    .getByRole("button", { name: "GitHubから作業環境を用意", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator(".repo-row").first().waitFor();
+  assert.equal(await dialog.locator(".repo-row").count(), 1);
+  assert.equal(await dialog.locator("#github-reference").inputValue(), "main");
+  assert(
+    await dialog.locator("#github-reference").evaluate((el) => el.readOnly),
+  );
+  await dialog
+    .getByLabel("クローン先の親フォルダー", { exact: true })
+    .fill(cloneParent);
+  await dialog.getByRole("button", { name: "クローン", exact: true }).click();
+  await dialog.waitFor({ state: "hidden", timeout: 120000 });
+  await page
+    .getByRole("button", { name: "元の更新方針で作業環境を確認", exact: true })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("navigation", { name: "メインナビゲーション" })
+      .locator('[aria-current="page"]')
+      .getAttribute("aria-label"),
+    "プロジェクト",
+  );
+  assert.equal(
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: join(cloneParent, "monorepo"),
+      encoding: "utf8",
+      windowsHide: true,
+    }).trim(),
+    auditedHead,
+  );
+  await page
+    .getByRole("button", { name: "元の更新方針で作業環境を確認", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "更新方針 （静的な計画）", exact: false })
+    .waitFor();
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
     JSON.stringify(

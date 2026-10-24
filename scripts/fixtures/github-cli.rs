@@ -2,6 +2,37 @@
 use std::env;
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    // Cloning is opt-in and restricted to a generated local test repository.
+    let root = env::current_exe().unwrap().parent().unwrap().to_path_buf();
+    if args.len() == 4
+        && args[0] == "repo"
+        && args[1] == "clone"
+        && root.join("clone-source").exists()
+    {
+        if args[2] != "https://github.example.invalid/Example/monorepo" {
+            std::process::exit(9);
+        }
+        let source = std::fs::read_to_string(root.join("clone-source")).unwrap();
+        let status = std::process::Command::new("git")
+            .args(["clone", "--", source.trim(), &args[3]])
+            .status()
+            .unwrap();
+        if !status.success() {
+            std::process::exit(8);
+        }
+        let status = std::process::Command::new("git")
+            .args([
+                "-C",
+                &args[3],
+                "remote",
+                "set-url",
+                "origin",
+                "https://github.example.invalid/Example/monorepo.git",
+            ])
+            .status()
+            .unwrap();
+        std::process::exit(if status.success() { 0 } else { 8 });
+    }
     if args.first().map(String::as_str) != Some("api")
         || !args.windows(2).any(|a| a == ["--method", "GET"])
     {

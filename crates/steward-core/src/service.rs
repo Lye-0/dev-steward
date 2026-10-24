@@ -545,7 +545,59 @@ impl Service {
                 }
                 let gh =
                     inventory::manager(&env, &settings, "gh").ok_or("GitHub CLIがありません")?;
-                process::checked(&env, &gh, &["repo", "clone", repo, &dest], &parent)?;
+                let report = payload
+                    .get("report")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|id| !id.is_empty())
+                    .map(|id| {
+                        self.store
+                            .get::<crate::github::Report>("github_projects", id)
+                    })
+                    .transpose()?;
+                if let Some(report) = &report {
+                    if !report.repository.eq_ignore_ascii_case(repo) || !report.complete {
+                        return Err("クローン対象が更新方針の調査対象と一致しません".into());
+                    }
+                    crate::github::assert_current(&env, &settings, report)?;
+                }
+                let reference = payload
+                    .get("reference")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("")
+                    .trim();
+                if reference.starts_with('-') || reference.contains(['\0', '\n', '\r']) {
+                    return Err("参照名が不正です".into());
+                }
+                let source = report.as_ref().map(|r| r.url.as_str()).unwrap_or(repo);
+                // Git for Windows does not accept verbatim paths as clone destination arguments.
+                // Keep the canonical parent for validation and only adapt the CLI argument.
+                let clone_dest = if let Some(unc) = dest.strip_prefix("\\\\?\\UNC\\") {
+                    format!("\\\\{unc}")
+                } else {
+                    dest.strip_prefix("\\\\?\\").unwrap_or(&dest).to_string()
+                };
+                process::checked(&env, &gh, &["repo", "clone", source, &clone_dest], &parent)?;
+                if let Some(report) = &report {
+                    projects::git(
+                        &env,
+                        &settings,
+                        &dest,
+                        &["checkout", "--detach", &report.commit],
+                    )?;
+                } else if !reference.is_empty() {
+                    projects::git(
+                        &env,
+                        &settings,
+                        &dest,
+                        &["fetch", "--", "origin", reference],
+                    )?;
+                    projects::git(
+                        &env,
+                        &settings,
+                        &dest,
+                        &["checkout", "--detach", "FETCH_HEAD"],
+                    )?;
+                }
                 let project = projects::scan(&env, &settings, &dest)?;
                 self.store.put("projects", &project.id, &project)?;
                 self.store.log("クローン", repo, "complete", &dest)?;

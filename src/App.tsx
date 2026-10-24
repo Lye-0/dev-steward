@@ -154,6 +154,8 @@ export function App() {
   const [cloneParent, setCloneParent] = useState("");
   const [githubSelection, setGithubSelection] = useState<string[]>([]);
   const [githubReference, setGithubReference] = useState("");
+  const [cloneReportId, setCloneReportId] = useState("");
+  const [clonedProjectId, setClonedProjectId] = useState("");
   const [pr, setPr] = useState<unknown>(null);
   const [systemOutput, setSystemOutput] = useState("");
   const [systemPackage, setSystemPackage] = useState("");
@@ -328,11 +330,24 @@ export function App() {
     setUpdateView("plans");
     setPage("plans");
   }
-  const openGithub = () =>
-    act("GitHubのリポジトリを取得中", "github_repos", null, (repos) => {
-      setGithubSelection([]);
-      setGitFork(repos);
-    });
+  function openGithub(reportId = "") {
+    const report = data.github_projects.find((r) => r.id === reportId);
+    setCloneReportId(report?.id ?? "");
+    setGithubReference(report?.branch ?? "");
+    setGithubSelection(report ? [report.repository] : []);
+    if (report) {
+      setGitFork([
+        {
+          nameWithOwner: report.repository,
+          url: report.url,
+          description: "更新方針の対象",
+          isArchived: false,
+        },
+      ]);
+      return;
+    }
+    act("GitHubのリポジトリを取得中", "github_repos", null, setGitFork);
+  }
   function updatesTable(rows: Update[], selectable: boolean) {
     return (
       <div className="table-scroll">
@@ -675,7 +690,10 @@ export function App() {
                     <button
                       className="icon-button"
                       aria-label="更新計画を見る"
-                      onClick={() => setPage("plans")}
+                      onClick={() => {
+                        setUpdateView("plans");
+                        setPage("plans");
+                      }}
                     >
                       <ArrowRight size={18} />
                     </button>
@@ -1183,17 +1201,7 @@ export function App() {
                 description="ローカルとGitHubの調査結果を、同じリポジトリごとに確認します。"
                 action={
                   <div className="button-row">
-                    <button
-                      disabled={!!busy}
-                      onClick={() =>
-                        act(
-                          "GitHubのリポジトリを取得中",
-                          "github_repos",
-                          null,
-                          setGitFork,
-                        )
-                      }
-                    >
+                    <button disabled={!!busy} onClick={() => openGithub()}>
                       <GitFork size={16} />
                       GitHubから
                     </button>
@@ -1244,6 +1252,14 @@ export function App() {
                           <div className="section-heading">
                             <div>
                               <h2>{project.name}</h2>
+                              {project.id === clonedProjectId &&
+                                staticPlan?.report_id === cloneReportId && (
+                                  <button
+                                    onClick={() => openProposal(staticPlan)}
+                                  >
+                                    元の更新方針で作業環境を確認
+                                  </button>
+                                )}
                               <p className="path">{project.path}</p>
                             </div>
                             <button
@@ -1684,7 +1700,7 @@ export function App() {
                       plan={staticPlan}
                       busy={!!busy}
                       onProject={openProject}
-                      onClone={openGithub}
+                      onClone={() => openGithub(staticPlan.report_id)}
                       onPrepare={(proposal, project) =>
                         act(
                           "対象コミットとローカル状態を再確認中",
@@ -1908,6 +1924,11 @@ export function App() {
             GitHub
             CLIで認証したアカウントのリポジトリ（最大300件）です。必要なファイルだけを調査するか、クローンして作業するか選べます。
           </p>
+          {cloneReportId && (
+            <p className="muted">
+              更新方針の対象だけを表示しています。調査したコミットをチェックアウトし、方針との一致は別途再確認します。
+            </p>
+          )}
           <label htmlFor="github-reference">
             ブランチ・参照名（空欄は各リポジトリの既定）
           </label>
@@ -1915,6 +1936,7 @@ export function App() {
             <input
               id="github-reference"
               value={githubReference}
+              readOnly={!!cloneReportId}
               onChange={(e) => setGithubReference(e.target.value)}
               placeholder="例: main、develop"
             />
@@ -1946,7 +1968,7 @@ export function App() {
           <p className="muted">
             1回に最大50件。調査にはクローン先の指定は不要です。更新候補の公開サービスとの照合は、取得後に別途実行します。
           </p>
-          <details>
+          <details open={cloneReportId ? true : undefined}>
             <summary>クローンして作業する場合の保存先</summary>
             <label htmlFor="clone-parent">クローン先の親フォルダー</label>
             <div className="input-row">
@@ -2014,12 +2036,20 @@ export function App() {
                       act(
                         "リポジトリをクローン中",
                         "clone_repo",
-                        { repo: r.nameWithOwner, parent: cloneParent },
+                        {
+                          repo: r.nameWithOwner,
+                          parent: cloneParent,
+                          reference: githubReference,
+                          report: cloneReportId || null,
+                        },
                         (p) => {
                           setGitFork(null);
                           setEnv("local");
-                          setProjectKind("local");
-                          setProjectId(p.id);
+                          setClonedProjectId(p.id);
+                          openProject({ kind: "local", id: p.id });
+                          setNotice(
+                            "クローンした作業場所を開きました。更新方針の作業環境確認を行ってから実行計画を作成してください。",
+                          );
                         },
                       )
                     }

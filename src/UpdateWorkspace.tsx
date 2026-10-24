@@ -251,7 +251,10 @@ export function StaticProposal({
             対象の調査結果を開く
           </button>
         )}
-        <button disabled={busy} onClick={onClone}>
+        <button
+          disabled={busy || plan.status === "outdated" || !report}
+          onClick={onClone}
+        >
           GitHubから作業環境を用意
         </button>
       </div>
