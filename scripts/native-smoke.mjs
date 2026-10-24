@@ -518,9 +518,7 @@ try {
     fullPage: true,
   });
   await page.getByRole("button", { name: "更新", exact: true }).click();
-  await page
-    .getByRole("button", { name: "計画・進行状況", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "計画・進行状況", exact: true }).click();
   await page
     .locator(".plan-catalog button")
     .filter({ hasText: "Example/monorepo" })
@@ -544,9 +542,7 @@ try {
     0,
     "Update targets belong to each plan, not a global filter",
   );
-  await page
-    .getByRole("button", { name: "計画・進行状況", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "計画・進行状況", exact: true }).click();
   await page
     .locator(".plan-catalog button")
     .filter({ hasText: "Example/monorepo" })
@@ -563,16 +559,83 @@ try {
     false,
     "GitHub page should not overflow horizontally",
   );
+  // Update actions belong to Updates, with their own explicit environment target.
+  await page.getByRole("button", { name: "環境・ツール", exact: true }).click();
+  assert.equal(
+    await page
+      .getByRole("heading", { name: "OS・アプリ管理元の更新", exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByRole("button", { name: "この環境の更新へ", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "OS・アプリ管理元の更新", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByLabel("更新操作の対象環境", { exact: true }).inputValue(),
+    simulated.id,
+  );
+  await page
+    .getByLabel("更新操作の対象環境", { exact: true })
+    .selectOption("local");
+  await page
+    .getByLabel("更新するWinGetパッケージID", { exact: true })
+    .waitFor();
+  const candidateTab = page.getByRole("tab", { name: "更新候補", exact: true });
+  const planTab = page.getByRole("tab", {
+    name: "計画・進行状況",
+    exact: true,
+  });
+  for (const width of [1400, 780]) {
+    await page.setViewportSize({ width, height: 900 });
+    const first = await candidateTab.boundingBox(),
+      second = await planTab.boundingBox();
+    assert(first && second);
+    assert(
+      Math.abs(first.y - second.y) < 1,
+      "Update tabs must share a horizontal row",
+    );
+    assert(second.x >= first.x + first.width, "Tabs must not overlap");
+    assert(
+      first.width + second.width < width - 70,
+      "Tabs should not become full-width stacked buttons",
+    );
+  }
+  await candidateTab.focus();
+  await candidateTab.press("ArrowRight");
+  assert.equal(await planTab.getAttribute("aria-selected"), "true");
+  assert(await planTab.evaluate((el) => el === document.activeElement));
+  await planTab.press("ArrowRight");
+  assert.equal(await candidateTab.getAttribute("aria-selected"), "true");
+  await candidateTab.press("End");
+  assert.equal(await planTab.getAttribute("aria-selected"), "true");
+  await planTab.press("Home");
+  assert.equal(await candidateTab.getAttribute("aria-selected"), "true");
+  assert.equal(
+    await page.getByRole("tabpanel", { name: "更新候補", exact: true }).count(),
+    1,
+  );
+  await page.screenshot({
+    path: "test-results/native-update-tabs-narrow.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  await page.screenshot({
+    path: "test-results/native-update-tabs.png",
+    fullPage: true,
+  });
   // Start on candidates to prove the overview shortcut chooses plans explicitly.
-  await page.getByRole("button", { name: "更新候補", exact: true }).click();
+  await page.getByRole("tab", { name: "更新候補", exact: true }).click();
   await page.getByRole("button", { name: "概要", exact: true }).click();
   await page
     .getByRole("button", { name: "更新計画を見る", exact: true })
     .click();
   assert.equal(
     await page
-      .getByRole("button", { name: "計画・進行状況", exact: true })
-      .getAttribute("aria-pressed"),
+      .getByRole("tab", { name: "計画・進行状況", exact: true })
+      .getAttribute("aria-selected"),
     "true",
   );
   await page.setViewportSize({ width: 1400, height: 1000 });

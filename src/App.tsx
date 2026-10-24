@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
+import { UpdateTabs } from "./UpdateTabs";
 import { ProjectCatalog } from "./ProjectCatalog";
 import {
   UpdateCandidates,
@@ -1124,73 +1125,14 @@ export function App() {
                   </details>
                 </>
               )}
-              <section className="panel details-panel">
-                <h2>OS・アプリ管理元の更新</h2>
-                <p className="muted">
-                  WinGetやAPTの更新一覧を取得します。OS用Pythonやアプリ同梱ランタイムを直接削除しません。
-                </p>
-                <button
-                  disabled={!!busy}
-                  onClick={() =>
-                    act(
-                      "システム管理元の更新を確認中",
-                      "system_updates",
-                      { environment: env },
-                      (v) => setSystemOutput(v.output),
-                    )
-                  }
-                >
-                  更新一覧を取得
-                </button>
-                {systemOutput && <pre>{systemOutput}</pre>}
-                {environment?.os === "windows" && (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      act(
-                        "WinGetの配布情報を確認中",
-                        "plan_system_update",
-                        { environment: env, package: systemPackage },
-                        openPlan,
-                      );
-                    }}
-                  >
-                    <label htmlFor="system-package">
-                      更新するWinGetパッケージID
-                    </label>
-                    <div className="input-row">
-                      <input
-                        id="system-package"
-                        value={systemPackage}
-                        onChange={(e) => setSystemPackage(e.target.value)}
-                        placeholder="一覧にある正確なパッケージID"
-                      />
-                      <button disabled={!!busy || !systemPackage}>
-                        更新計画を作成
-                      </button>
-                    </div>
-                  </form>
-                )}
-                <h3>管理ツール本体の更新</h3>
-                <div className="button-row">
-                  {["mise", "uv", "rustup"].map((manager) => (
-                    <button
-                      key={manager}
-                      disabled={!!busy}
-                      onClick={() =>
-                        act(
-                          "導入元と更新方法を確認中",
-                          "plan_manager_update",
-                          { environment: env, manager },
-                          openPlan,
-                        )
-                      }
-                    >
-                      {manager} の更新を計画
-                    </button>
-                  ))}
-                </div>
-              </section>
+              <button
+                onClick={() => {
+                  setUpdateView("candidates");
+                  setPage("plans");
+                }}
+              >
+                この環境の更新へ <ArrowRight size={16} />
+              </button>
             </>
           )}
           {page === "projects" && (
@@ -1652,173 +1594,257 @@ export function App() {
                 title="更新"
                 description="更新候補から方針・実行計画を作り、検証と旧版の整理を進めます。"
               />
-              <nav className="workspace-tabs" aria-label="更新の表示">
-                <button
-                  aria-pressed={updateView === "candidates"}
-                  onClick={() => setUpdateView("candidates")}
-                >
-                  更新候補
-                </button>
-                <button
-                  aria-pressed={updateView === "plans"}
-                  onClick={() => setUpdateView("plans")}
-                >
-                  計画・進行状況
-                </button>
-              </nav>
-              {updateView === "candidates" ? (
-                <UpdateCandidates
-                  data={data}
-                  onProject={openProject}
-                  onEnvironment={(id) => {
-                    setEnv(id);
-                    setPage("environment");
-                  }}
-                />
-              ) : (
-                <>
-                  <PlanCatalog
-                    data={data}
-                    selected={{
-                      kind: staticPlanId ? "github" : "local",
-                      id: staticPlanId || planId,
-                    }}
-                    onSelect={(target) => {
-                      if (target.kind === "github") {
-                        setStaticPlanId(target.id);
-                        setPlanId("");
-                      } else {
-                        setPlanId(target.id);
-                        setStaticPlanId("");
-                      }
-                      setConfirmed(false);
-                    }}
-                  />
-                  {staticPlan && (
-                    <StaticProposal
+              <UpdateTabs value={updateView} onChange={setUpdateView} />
+              <section
+                role="tabpanel"
+                id={`update-panel-${updateView}`}
+                aria-labelledby={`update-tab-${updateView}`}
+                tabIndex={0}
+              >
+                {updateView === "candidates" ? (
+                  <>
+                    <UpdateCandidates
                       data={data}
-                      plan={staticPlan}
-                      busy={!!busy}
                       onProject={openProject}
-                      onClone={() => openGithub(staticPlan.report_id)}
-                      onPrepare={(proposal, project) =>
-                        act(
-                          "対象コミットとローカル状態を再確認中",
-                          "prepare_github_proposal",
-                          { proposal, project },
-                          (p) => {
-                            openProject({ kind: "local", id: p.id });
-                            setNotice(
-                              "対象コミットと作業状態を確認しました。依存を照合し、実施する検証を選んで実行計画を作成してください。",
-                            );
-                          },
-                        )
-                      }
+                      onEnvironment={(id) => {
+                        setEnv(id);
+                        setPage("environment");
+                      }}
                     />
-                  )}
-                  {!staticPlanId && plan && (
-                    <>
-                      <section className="panel details-panel">
-                        <div className="section-heading">
-                          <div>
-                            <h2>{plan.title}</h2>
-                            <p>{plan.reason}</p>
-                            <p className="muted">
-                              実行計画 · 対象環境:{" "}
-                              {data.environments.find(
-                                (e) => e.id === plan.environment,
-                              )?.name ?? plan.environment}
-                            </p>
-                          </div>
-                          <Badge status={plan.status} />
-                        </div>
-                        {plan.evidence.map((e, i) => (
-                          <p className="evidence" key={i}>
-                            <Check size={15} />
-                            {e}
-                          </p>
-                        ))}
-                        <div className="plan-warnings">
-                          {plan.warnings.map((w, i) => (
-                            <p key={i}>
-                              <CircleHelp size={15} />
-                              {w}
-                            </p>
+
+                    <section className="panel details-panel">
+                      <h2>OS・アプリ管理元の更新</h2>
+                      <div className="maintenance-target">
+                        <label htmlFor="maintenance-environment">
+                          更新操作の対象環境
+                        </label>
+                        <select
+                          id="maintenance-environment"
+                          value={env}
+                          disabled={!!busy}
+                          onChange={(e) => {
+                            setEnv(e.target.value);
+                            setSystemPackage("");
+                          }}
+                        >
+                          {data.environments.map((e) => (
+                            <option key={e.id} value={e.id}>
+                              {e.name} · {e.os}
+                            </option>
                           ))}
-                        </div>
-                      </section>
-                      <div className="steps">
-                        {plan.steps.map((s, i) => (
-                          <section
-                            key={s.id}
-                            className={`panel execution-step ${s.status}`}
-                          >
-                            <div className="step-title">
-                              <span className="step-number">
-                                {s.status === "success" ? (
-                                  <Check size={17} />
-                                ) : (
-                                  String(i + 1).padStart(2, "0")
-                                )}
-                              </span>
-                              <h3>{s.label}</h3>
-                              <Badge status={s.status} />
-                            </div>
-                            <p className="path">実行場所: {s.cwd}</p>
-                            <pre>
-                              {[
-                                s.program,
-                                ...s.args.map((a) => JSON.stringify(a)),
-                              ].join(" ")}
-                            </pre>
-                            {s.output && (
-                              <details open={s.status === "failed"}>
-                                <summary>実行結果</summary>
-                                <pre>{s.output}</pre>
-                              </details>
-                            )}
-                          </section>
-                        ))}
+                        </select>
                       </div>
-                      {next >= 0 && (
-                        <section className="execution-confirm">
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={confirmed}
-                              onChange={(e) => setConfirmed(e.target.checked)}
-                            />
-                            「{plan.steps[next].label}
-                            」の対象・コマンドと影響を確認しました
+                      <p className="muted">
+                        WinGetやAPTの更新一覧を取得します。OS用Pythonやアプリ同梱ランタイムを直接削除しません。
+                      </p>
+                      <button
+                        disabled={!!busy}
+                        onClick={() =>
+                          act(
+                            "システム管理元の更新を確認中",
+                            "system_updates",
+                            { environment: env },
+                            (v) => setSystemOutput(v.output),
+                          )
+                        }
+                      >
+                        更新一覧を取得
+                      </button>
+                      {systemOutput && <pre>{systemOutput}</pre>}
+                      {environment?.os === "windows" && (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            act(
+                              "WinGetの配布情報を確認中",
+                              "plan_system_update",
+                              { environment: env, package: systemPackage },
+                              openPlan,
+                            );
+                          }}
+                        >
+                          <label htmlFor="system-package">
+                            更新するWinGetパッケージID
                           </label>
+                          <div className="input-row">
+                            <input
+                              id="system-package"
+                              value={systemPackage}
+                              onChange={(e) => setSystemPackage(e.target.value)}
+                              placeholder="一覧にある正確なパッケージID"
+                            />
+                            <button disabled={!!busy || !systemPackage}>
+                              更新計画を作成
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                      <h3>管理ツール本体の更新</h3>
+                      <div className="button-row">
+                        {["mise", "uv", "rustup"].map((manager) => (
                           <button
-                            className="primary"
-                            disabled={!!busy || !confirmed}
+                            key={manager}
+                            disabled={!!busy}
                             onClick={() =>
                               act(
-                                "工程を実行中",
-                                "execute_step",
-                                { plan: plan.id, confirmed: true },
-                                () => setConfirmed(false),
+                                "導入元と更新方法を確認中",
+                                "plan_manager_update",
+                                { environment: env, manager },
+                                openPlan,
                               )
                             }
                           >
-                            次の工程を実行
-                            <ArrowRight size={16} />
+                            {manager} の更新を計画
                           </button>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <PlanCatalog
+                      data={data}
+                      selected={{
+                        kind: staticPlanId ? "github" : "local",
+                        id: staticPlanId || planId,
+                      }}
+                      onSelect={(target) => {
+                        if (target.kind === "github") {
+                          setStaticPlanId(target.id);
+                          setPlanId("");
+                        } else {
+                          setPlanId(target.id);
+                          setStaticPlanId("");
+                        }
+                        setConfirmed(false);
+                      }}
+                    />
+                    {staticPlan && (
+                      <StaticProposal
+                        data={data}
+                        plan={staticPlan}
+                        busy={!!busy}
+                        onProject={openProject}
+                        onClone={() => openGithub(staticPlan.report_id)}
+                        onPrepare={(proposal, project) =>
+                          act(
+                            "対象コミットとローカル状態を再確認中",
+                            "prepare_github_proposal",
+                            { proposal, project },
+                            (p) => {
+                              openProject({ kind: "local", id: p.id });
+                              setNotice(
+                                "対象コミットと作業状態を確認しました。依存を照合し、実施する検証を選んで実行計画を作成してください。",
+                              );
+                            },
+                          )
+                        }
+                      />
+                    )}
+                    {!staticPlanId && plan && (
+                      <>
+                        <section className="panel details-panel">
+                          <div className="section-heading">
+                            <div>
+                              <h2>{plan.title}</h2>
+                              <p>{plan.reason}</p>
+                              <p className="muted">
+                                実行計画 · 対象環境:{" "}
+                                {data.environments.find(
+                                  (e) => e.id === plan.environment,
+                                )?.name ?? plan.environment}
+                              </p>
+                            </div>
+                            <Badge status={plan.status} />
+                          </div>
+                          {plan.evidence.map((e, i) => (
+                            <p className="evidence" key={i}>
+                              <Check size={15} />
+                              {e}
+                            </p>
+                          ))}
+                          <div className="plan-warnings">
+                            {plan.warnings.map((w, i) => (
+                              <p key={i}>
+                                <CircleHelp size={15} />
+                                {w}
+                              </p>
+                            ))}
+                          </div>
                         </section>
-                      )}
-                      {["failed", "cancelled", "interrupted"].includes(
-                        plan.status,
-                      ) && (
-                        <p className="warning-note">
-                          結果を確認し、プロジェクトを再調査して再計画してください。失敗した操作を自動で繰り返しません。
-                        </p>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+                        <div className="steps">
+                          {plan.steps.map((s, i) => (
+                            <section
+                              key={s.id}
+                              className={`panel execution-step ${s.status}`}
+                            >
+                              <div className="step-title">
+                                <span className="step-number">
+                                  {s.status === "success" ? (
+                                    <Check size={17} />
+                                  ) : (
+                                    String(i + 1).padStart(2, "0")
+                                  )}
+                                </span>
+                                <h3>{s.label}</h3>
+                                <Badge status={s.status} />
+                              </div>
+                              <p className="path">実行場所: {s.cwd}</p>
+                              <pre>
+                                {[
+                                  s.program,
+                                  ...s.args.map((a) => JSON.stringify(a)),
+                                ].join(" ")}
+                              </pre>
+                              {s.output && (
+                                <details open={s.status === "failed"}>
+                                  <summary>実行結果</summary>
+                                  <pre>{s.output}</pre>
+                                </details>
+                              )}
+                            </section>
+                          ))}
+                        </div>
+                        {next >= 0 && (
+                          <section className="execution-confirm">
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={confirmed}
+                                onChange={(e) => setConfirmed(e.target.checked)}
+                              />
+                              「{plan.steps[next].label}
+                              」の対象・コマンドと影響を確認しました
+                            </label>
+                            <button
+                              className="primary"
+                              disabled={!!busy || !confirmed}
+                              onClick={() =>
+                                act(
+                                  "工程を実行中",
+                                  "execute_step",
+                                  { plan: plan.id, confirmed: true },
+                                  () => setConfirmed(false),
+                                )
+                              }
+                            >
+                              次の工程を実行
+                              <ArrowRight size={16} />
+                            </button>
+                          </section>
+                        )}
+                        {["failed", "cancelled", "interrupted"].includes(
+                          plan.status,
+                        ) && (
+                          <p className="warning-note">
+                            結果を確認し、プロジェクトを再調査して再計画してください。失敗した操作を自動で繰り返しません。
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </section>
             </>
           )}
           {page === "history" && (
