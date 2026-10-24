@@ -142,6 +142,7 @@ export interface GithubReport {
   project: Project;
 }
 export interface GithubProposal {
+  workspace?: string | null;
   id: string;
   report_id: string;
   commit: string;

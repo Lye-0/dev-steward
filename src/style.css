@@ -1537,3 +1537,109 @@ input::placeholder {
 .repo-row strong {
   overflow-wrap: anywhere;
 }
+.workspace-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.workspace-tabs button[aria-pressed="true"] {
+  background: var(--positive-bg);
+  color: var(--positive-text);
+  border-color: var(--accent);
+}
+.project-catalog .toolbar {
+  margin-top: 18px;
+}
+.catalog-groups {
+  max-height: 440px;
+  overflow: auto;
+  padding: 4px;
+  margin-top: 18px;
+}
+.catalog-group + .catalog-group {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.catalog-group h3 {
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.catalog-entry {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  min-width: 0;
+  padding: 13px 12px;
+  margin: 5px 0;
+}
+.catalog-entry > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-entry strong {
+  font-size: 12px;
+}
+.catalog-entry.active {
+  background: var(--positive-bg);
+  border-color: var(--accent);
+}
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  width: max-content;
+  max-width: 100%;
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 10px;
+  background: var(--raised);
+  color: var(--secondary);
+}
+.source-tag.github {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+.catalog-choice {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.catalog-group > .catalog-entry {
+  width: calc(100% - 28px);
+  margin-left: 28px;
+}
+.plan-catalog {
+  max-height: 360px;
+  overflow: auto;
+  margin-top: 14px;
+  padding: 4px;
+}
+#project-detail {
+  scroll-margin-top: 20px;
+}
+.project-detail .section-heading {
+  flex-wrap: wrap;
+}
+@media (max-width: 900px) {
+  .catalog-entry {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .catalog-entry > small,
+  .catalog-entry > .badge {
+    grid-column: 2;
+  }
+  .project-catalog .toolbar {
+    flex-wrap: wrap;
+  }
+  .project-catalog .search {
+    min-width: 160px;
+  }
+}

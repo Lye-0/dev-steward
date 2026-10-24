@@ -67,6 +67,7 @@ export function displayDate(value: string) {
     : "未調査";
 }
 export const statusLabel: Record<string, string> = {
+  prepared: "作業環境確認済み",
   ok: "取得済み",
   missing: "未検出",
   error: "取得失敗",

@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  readdirSync,
+  mkdirSync,
+  unlinkSync,
+} from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
@@ -74,6 +80,59 @@ assert(
       p.endsWith("package.json"),
   ),
 );
+// Only this generated workspace is modified; no clone or user repository is used.
+unlinkSync(join(temp, "head-moved"));
+const workspace = join(temp, "local workspace");
+mkdirSync(workspace);
+const git = (...args) =>
+  execFileSync("git", args, {
+    cwd: workspace,
+    windowsHide: true,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+git("init", "-b", "main");
+git("config", "user.email", "fixture@example.invalid");
+git("config", "user.name", "Fixture");
+writeFileSync(
+  join(workspace, "package.json"),
+  '{"name":"fixture","version":"1.0.0"}',
+);
+git("add", ".");
+git("commit", "-m", "fixture");
+const origin = "https://github.example.invalid/Example/monorepo.git";
+git("remote", "add", "origin", origin);
+const head = git("rev-parse", "HEAD");
+writeFileSync(join(temp, "fixed-head"), head);
+const freshReport = invoke("scan_github_repos", {
+  repositories: ["Example/monorepo"],
+}).reports[0];
+invoke("check_github_updates", { report: freshReport.id });
+const freshProposal = invoke("plan_github_updates", { report: freshReport.id });
+invoke("scan_root", { environment: "local", path: workspace });
+const local = invoke("snapshot").projects[0];
+const preparation = { proposal: freshProposal.id, project: local.id };
+invoke("prepare_github_proposal", preparation);
+const prepared = invoke("snapshot").github_plans.find(
+  (p) => p.id === freshProposal.id,
+);
+assert.equal(prepared.workspace, local.id);
+assert.equal(prepared.status, "prepared");
+assert.equal(git("rev-parse", "HEAD"), head);
+assert.equal(git("status", "--porcelain"), "");
+writeFileSync(join(workspace, "uncommitted.txt"), "fixture");
+rejected("prepare_github_proposal", preparation);
+unlinkSync(join(workspace, "uncommitted.txt"));
+git(
+  "remote",
+  "set-url",
+  "origin",
+  "https://github.example.invalid/Example/other.git",
+);
+rejected("prepare_github_proposal", preparation);
+git("remote", "set-url", "origin", origin);
+git("commit", "--allow-empty", "-m", "different commit");
+rejected("prepare_github_proposal", preparation);
 console.log(
   JSON.stringify(
     {
@@ -84,6 +143,7 @@ console.log(
       sharedMonorepoParser: true,
       proposalSaved: true,
       staleCommitRejected: true,
+      workspaceGuards: true,
     },
     null,
     2,

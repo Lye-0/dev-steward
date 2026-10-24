@@ -36,6 +36,8 @@ pub struct Proposal {
     pub steps: Vec<String>,
     pub warnings: Vec<String>,
     pub status: String,
+    #[serde(default)]
+    pub workspace: Option<String>,
 }
 
 pub fn validate_repo(repo: &str) -> Result<(), String> {
@@ -167,6 +169,36 @@ pub fn assert_current(
         return Err("GitHubの対象ブランチが更新されました。再調査・再照合してください".into());
     }
     Ok(())
+}
+
+pub fn same_repository(remote: &str, report: &Report) -> bool {
+    let parsed = reqwest::Url::parse(remote).ok().or_else(|| {
+        let (host, path) = remote.split_once(':')?;
+        if host.contains('/') || path.starts_with('\\') {
+            return None;
+        }
+        reqwest::Url::parse(&format!("ssh://{}/{path}", host.rsplit('@').next()?)).ok()
+    });
+    let Some(url) = parsed else {
+        return false;
+    };
+    if !["https", "http", "ssh", "git"].contains(&url.scheme()) {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host = match url.port() {
+        Some(22) if url.scheme() == "ssh" => host.into(),
+        Some(port) => format!("{host}:{port}"),
+        None => host.into(),
+    };
+    host.eq_ignore_ascii_case(&report.host)
+        && url
+            .path()
+            .trim_matches('/')
+            .trim_end_matches(".git")
+            .eq_ignore_ascii_case(&report.repository)
 }
 pub fn wanted(path: &str) -> bool {
     if path.starts_with('/')
@@ -483,6 +515,7 @@ pub fn proposal(report: &Report, updates: &[Update]) -> Result<Proposal, String>
         ],
         warnings,
         status: "draft".into(),
+        workspace: None,
     })
 }
 

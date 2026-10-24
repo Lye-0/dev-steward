@@ -451,6 +451,49 @@ impl Service {
                 )?;
                 Ok(json!(result))
             }
+            "prepare_github_proposal" => {
+                let _guard = self
+                    .execution
+                    .try_lock()
+                    .map_err(|_| "別の調査・工程が実行中です")?;
+                let mut proposal: crate::github::Proposal = self
+                    .store
+                    .get("github_plans", field(&payload, "proposal")?)?;
+                let report: crate::github::Report =
+                    self.store.get("github_projects", &proposal.report_id)?;
+                if !["draft", "prepared"].contains(&proposal.status.as_str())
+                    || proposal.commit != report.commit
+                    || !report.complete
+                {
+                    return Err("GitHubの調査と更新方針を作り直してください".into());
+                }
+                crate::github::assert_current(&self.env("local")?, &settings, &report)?;
+                let saved: Project = self.store.get("projects", field(&payload, "project")?)?;
+                let env = self.env(&saved.environment)?;
+                let fresh = projects::scan(&env, &settings, &saved.path)?;
+                if !crate::github::same_repository(&fresh.remote, &report) {
+                    return Err("選択した作業場所のリモートが対象リポジトリと一致しません".into());
+                }
+                let head = projects::git(&env, &settings, &fresh.path, &["rev-parse", "HEAD"])?;
+                if head.trim() != proposal.commit {
+                    return Err("ローカルのコミットがGitHubの調査対象と異なります。同期・ブランチ選択後に再確認してください。自動チェックアウトやリセットは行いません。".into());
+                }
+                if !fresh.git_status.is_empty() {
+                    return Err("ローカルに未コミットの変更があります。変更を確定または退避した後に再確認してください".into());
+                }
+                self.store.put("projects", &fresh.id, &fresh)?;
+                self.store.delete("updates", &fresh.id)?;
+                proposal.workspace = Some(fresh.id.clone());
+                proposal.status = "prepared".into();
+                self.store.put("github_plans", &proposal.id, &proposal)?;
+                self.store.log(
+                    "GitHub方針の作業環境確認",
+                    &report.repository,
+                    "complete",
+                    &format!("{} / {}", head.trim(), fresh.path),
+                )?;
+                Ok(json!(fresh))
+            }
             "plan_github_updates" => {
                 let _guard = self
                     .execution

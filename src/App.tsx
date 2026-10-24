@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { call, chooseDirectory } from "./bridge";
 import { GithubReports } from "./GithubReports";
+import { ProjectCatalog } from "./ProjectCatalog";
+import {
+  UpdateCandidates,
+  PlanCatalog,
+  StaticProposal,
+} from "./UpdateWorkspace";
+import { projectGroups, type ProjectTarget } from "./workspace";
 import {
   displayDate,
   groupTools,
@@ -36,20 +43,12 @@ import {
 import type { Snapshot, Plan, Update, Settings } from "./types";
 
 type Page =
-  | "overview"
-  | "environment"
-  | "projects"
-  | "github"
-  | "plans"
-  | "history"
-  | "settings";
+  "overview" | "environment" | "projects" | "plans" | "history" | "settings";
 const pages: { id: Page; label: string; icon: typeof Monitor }[] = [
-  { id: "overview", label: "全体状況", icon: Layers3 },
-  { id: "environment", label: "開発環境", icon: Monitor },
+  { id: "overview", label: "概要", icon: Layers3 },
+  { id: "environment", label: "環境・ツール", icon: Monitor },
   { id: "projects", label: "プロジェクト", icon: FolderGit2 },
-  { id: "github", label: "GitHub調査", icon: GitFork },
-  { id: "plans", label: "更新計画", icon: ListChecks },
-  { id: "history", label: "実行履歴", icon: Clock3 },
+  { id: "plans", label: "更新", icon: ListChecks },
 ];
 const empty: Snapshot = {
   github_projects: [],
@@ -130,6 +129,12 @@ export function App() {
   const [search, setSearch] = useState("");
   const [expandedTools, setExpandedTools] = useState<string[]>([]);
   const [projectId, setProjectId] = useState("");
+  const [projectKind, setProjectKind] = useState<"local" | "github">("local");
+  const [githubReportId, setGithubReportId] = useState("");
+  const [staticPlanId, setStaticPlanId] = useState("");
+  const [updateView, setUpdateView] = useState<"candidates" | "plans">(
+    "candidates",
+  );
   const [planId, setPlanId] = useState("");
   const [root, setRoot] = useState("");
   const [adding, setAdding] = useState(false);
@@ -191,7 +196,11 @@ export function App() {
     setConfirmed(false);
     setPinTool("");
     setDependencyQuery("");
-  }, [env, projectId, planId]);
+  }, [projectId, planId]);
+  useEffect(() => {
+    setSearch("");
+    setSelected([]);
+  }, [env]);
   useEffect(() => {
     if (!busy) return;
     const id = setInterval(() => refresh().catch(() => {}), 2000);
@@ -207,25 +216,43 @@ export function App() {
   const toolGroups = groupTools(tools, search, false);
   const wingetTools = tools.filter((t) => t.manager === "winget");
   const wingetRows = groupTools(wingetTools, search, true)[0]?.[1] ?? [];
-  const projects = data.projects.filter((p) => p.environment === env);
+  const projects = data.projects;
   const project = projects.find((p) => p.id === projectId);
+  const projectTools =
+    data.inventories.find((i) => i.environment === project?.environment)
+      ?.tools ?? [];
+  const staticPlan = data.github_plans.find((p) => p.id === staticPlanId);
   const projectUpdates = data.updates.filter(
     (u) => u.project_id === project?.id,
   );
   const toolUpdates = data.updates.filter(
     (u) => u.tool_id && tools.some((t) => t.id === u.tool_id),
   );
-  const plans = data.plans
-    .filter((p) => p.environment === env)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const plan = plans.find((p) => p.id === planId) ?? plans[0];
+  const plans = data.plans.sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  const plan = plans.find((p) => p.id === planId);
   const next = plan ? executableStep(plan.status, plan.steps) : -1;
   const pending = plans.filter((p) => p.status === "ready").length;
-  const security = data.updates.filter(
-    (u) =>
-      u.importance === "security" &&
-      projects.some((p) => p.id === u.project_id),
+  const security = [...data.updates, ...data.github_updates].filter(
+    (u) => u.importance === "security",
   ).length;
+  function openProject(target: ProjectTarget) {
+    setProjectKind(target.kind);
+    if (target.kind === "local") setProjectId(target.id);
+    else setGithubReportId(target.id);
+    setPage("projects");
+  }
+  useEffect(() => {
+    if (
+      page !== "projects" ||
+      !(projectKind === "local" ? projectId : githubReportId)
+    )
+      return;
+    const section = document.getElementById("project-detail");
+    section?.scrollIntoView({ block: "start" });
+    section?.focus({ preventScroll: true });
+  }, [page, projectKind, projectId, githubReportId]);
   const toggle = (list: string[], value: string, set: (s: string[]) => void) =>
     set(
       list.includes(value) ? list.filter((v) => v !== value) : [...list, value],
@@ -290,9 +317,22 @@ export function App() {
   );
   function openPlan(p: Plan) {
     setPlanId(p.id);
+    setStaticPlanId("");
+    setUpdateView("plans");
     setPage("plans");
     setConfirmed(false);
   }
+  function openProposal(p: { id: string }) {
+    setStaticPlanId(p.id);
+    setPlanId("");
+    setUpdateView("plans");
+    setPage("plans");
+  }
+  const openGithub = () =>
+    act("GitHubのリポジトリを取得中", "github_repos", null, (repos) => {
+      setGithubSelection([]);
+      setGitFork(repos);
+    });
   function updatesTable(rows: Update[], selectable: boolean) {
     return (
       <div className="table-scroll">
@@ -376,7 +416,7 @@ export function App() {
       <aside className="sidebar">
         <a
           className="brand"
-          aria-label="Dev Steward 全体状況"
+          aria-label="Dev Steward 概要"
           href="#"
           onClick={(e) => {
             e.preventDefault();
@@ -409,13 +449,26 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button
-            className={`nav-item ${page === "settings" ? "selected" : ""}`}
-            onClick={() => setPage("settings")}
-          >
-            <Settings2 size={19} />
-            設定
-          </button>
+          <nav aria-label="補助ナビゲーション">
+            <button
+              className={`nav-item ${page === "history" ? "selected" : ""}`}
+              aria-label="履歴"
+              aria-current={page === "history" ? "page" : undefined}
+              onClick={() => setPage("history")}
+            >
+              <Clock3 size={19} />
+              <span>履歴</span>
+            </button>
+            <button
+              className={`nav-item ${page === "settings" ? "selected" : ""}`}
+              aria-label="設定"
+              aria-current={page === "settings" ? "page" : undefined}
+              onClick={() => setPage("settings")}
+            >
+              <Settings2 size={19} />
+              <span>設定</span>
+            </button>
+          </nav>
           <div className="local-note">
             <ShieldCheck size={16} />
             <span>
@@ -431,35 +484,43 @@ export function App() {
             <strong>
               {page === "settings"
                 ? "設定"
-                : pages.find((p) => p.id === page)?.label}
+                : page === "history"
+                  ? "履歴"
+                  : pages.find((p) => p.id === page)?.label}
             </strong>
           </div>
-          <div className="environment-select">
-            <Monitor size={16} />
-            <label className="sr-only" htmlFor="environment">
-              対象の環境
-            </label>
-            <select
-              id="environment"
-              value={env}
-              onChange={(e) => {
-                setEnv(e.target.value);
-                setProjectId("");
-                setPlanId("");
-              }}
-            >
-              {data.environments.length ? (
-                data.environments.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name} · {e.os}
-                  </option>
-                ))
-              ) : (
-                <option value="local">このデバイス</option>
-              )}
-            </select>
-            <span className="status-dot" />
-          </div>
+          {(page === "environment" ||
+            page === "projects" ||
+            page === "settings") && (
+            <div className="environment-select">
+              <Monitor size={16} />
+              <label className="sr-only" htmlFor="environment">
+                {page === "projects"
+                  ? "比較・登録する環境"
+                  : page === "settings"
+                    ? "設定対象の環境"
+                    : "操作する環境"}
+              </label>
+              <select
+                id="environment"
+                value={env}
+                onChange={(e) => {
+                  setEnv(e.target.value);
+                }}
+              >
+                {data.environments.length ? (
+                  data.environments.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name} · {e.os}
+                    </option>
+                  ))
+                ) : (
+                  <option value="local">このデバイス</option>
+                )}
+              </select>
+              <span className="status-dot" />
+            </div>
+          )}
         </header>
         <main id="main-content">
           <div className="feedback" aria-live="polite">
@@ -510,30 +571,27 @@ export function App() {
                 <button
                   className="primary"
                   disabled={!!busy}
-                  onClick={() =>
-                    act("環境を調査中", "scan_environment", {
-                      environment: env,
-                    })
-                  }
+                  onClick={() => setPage("environment")}
                 >
                   <RefreshCw size={16} />
-                  環境を調査
+                  環境・ツールを確認
                 </button>
               </div>
               <div className="stats">
                 <button onClick={() => setPage("environment")}>
                   <span>管理ツール・ランタイム</span>
                   <strong>
-                    {inventory
-                      ? tools.filter(
-                          (t) => t.installed && t.manager !== "winget",
-                        ).length
+                    {data.inventories.length
+                      ? data.inventories
+                          .flatMap((i) => i.tools)
+                          .filter((t) => t.installed && t.manager !== "winget")
+                          .length
                       : "—"}
                     <small>件</small>
                   </strong>
                   <span>
-                    {inventory
-                      ? `最終調査 ${displayDate(inventory.captured_at)}`
+                    {data.inventories.length
+                      ? `登録環境 ${data.inventories.length}件を調査済み`
                       : "まだ調査していません"}
                     <ArrowRight size={15} />
                   </span>
@@ -541,7 +599,7 @@ export function App() {
                 <button onClick={() => setPage("projects")}>
                   <span>登録プロジェクト</span>
                   <strong>
-                    {projects.length}
+                    {projectGroups(data.projects, data.github_projects).length}
                     <small>件</small>
                   </strong>
                   <span>
@@ -549,7 +607,12 @@ export function App() {
                     <ArrowRight size={15} />
                   </span>
                 </button>
-                <button onClick={() => setPage("plans")}>
+                <button
+                  onClick={() => {
+                    setUpdateView("plans");
+                    setPage("plans");
+                  }}
+                >
                   <span>実行待ちの計画</span>
                   <strong>
                     {pending}
@@ -679,7 +742,7 @@ export function App() {
             <>
               <PageHeading
                 eyebrow="ENVIRONMENTS"
-                title="開発環境"
+                title="環境・ツール"
                 description="管理元、配置、利用先を確認します。WindowsとWSLは別々の環境です。"
                 action={
                   <button
@@ -897,6 +960,8 @@ export function App() {
                                               className="text-button"
                                               key={p.id}
                                               onClick={() => {
+                                                setProjectKind("local");
+                                                setProjectKind("local");
                                                 setProjectId(p.id);
                                                 setPage("projects");
                                               }}
@@ -1110,33 +1175,12 @@ export function App() {
               </section>
             </>
           )}
-          {page === "github" && (
-            <GithubReports
-              data={data}
-              tools={tools}
-              scanned={!!inventory}
-              environment={environment?.name ?? env}
-              busy={!!busy}
-              act={act}
-              open={() =>
-                act(
-                  "GitHubのリポジトリを取得中",
-                  "github_repos",
-                  null,
-                  (repos) => {
-                    setGithubSelection([]);
-                    setGitFork(repos);
-                  },
-                )
-              }
-            />
-          )}
           {page === "projects" && (
             <>
               <PageHeading
                 eyebrow="PROJECTS"
                 title="プロジェクト"
-                description="リポジトリと、そこで必要なツール・パッケージを管理します。"
+                description="ローカルとGitHubの調査結果を、同じリポジトリごとに確認します。"
                 action={
                   <div className="button-row">
                     <button
@@ -1166,44 +1210,33 @@ export function App() {
               {adding && (
                 <section className="panel details-panel">{rootForm}</section>
               )}
-              {!projects.length ? (
-                <Empty
-                  icon={FolderGit2}
-                  title="プロジェクトを登録しましょう"
-                  action={
-                    <button onClick={() => setAdding(true)}>
-                      フォルダーを選ぶ
-                    </button>
-                  }
-                >
-                  クローン済みのリポジトリ、またはリポジトリをまとめたフォルダーを登録できます。
-                </Empty>
-              ) : (
-                <div className="project-layout">
-                  <aside className="project-list" aria-label="登録プロジェクト">
-                    {projects.map((p) => (
-                      <button
-                        key={p.id}
-                        className={
-                          p.id === project?.id
-                            ? "project-link active"
-                            : "project-link"
-                        }
-                        onClick={() => setProjectId(p.id)}
-                      >
-                        <FolderGit2 size={19} />
-                        <span>
-                          <strong>{p.name}</strong>
-                          <small>{p.package_manager}</small>
-                        </span>
-                        <ChevronRight size={14} />
-                      </button>
-                    ))}
-                  </aside>
+              <ProjectCatalog
+                data={data}
+                selected={{
+                  kind: projectKind,
+                  id: projectKind === "local" ? projectId : githubReportId,
+                }}
+                onSelect={openProject}
+                busy={!!busy}
+                onAudit={(ids) =>
+                  act(
+                    "選択したGitHub依存を照合中",
+                    "check_github_updates_batch",
+                    { reports: ids },
+                  )
+                }
+              />
+              <div
+                id="project-detail"
+                tabIndex={-1}
+                role="region"
+                aria-label="プロジェクトの詳細"
+              >
+                {projectKind === "local" ? (
                   <div className="project-detail">
                     {!project ? (
                       <Empty icon={FolderGit2} title="プロジェクトを選択">
-                        左の一覧から調査結果を確認してください。
+                        上の一覧から作業場所またはGitHubの調査結果を選択してください。
                       </Empty>
                     ) : (
                       <>
@@ -1240,6 +1273,12 @@ export function App() {
                                 : "変更なし"}
                             </Badge>
                             <span>{project.package_manager}</span>
+                            <span>
+                              実行対象:{" "}
+                              {data.environments.find(
+                                (e) => e.id === project.environment,
+                              )?.name ?? project.environment}
+                            </span>
                             <span>{displayDate(project.scanned_at)}</span>
                           </div>
                           {project.git_status && (
@@ -1332,7 +1371,7 @@ export function App() {
                               onChange={(e) => setPinTool(e.target.value)}
                             >
                               <option value="">導入済みの版を選択</option>
-                              {tools
+                              {projectTools
                                 .filter(
                                   (t) =>
                                     t.installed &&
@@ -1573,42 +1612,107 @@ export function App() {
                       </>
                     )}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <GithubReports
+                    key={githubReportId}
+                    data={data}
+                    tools={tools}
+                    scanned={!!inventory}
+                    environment={environment?.name ?? env}
+                    busy={!!busy}
+                    act={act}
+                    selected={githubReportId}
+                    onClose={() => setGithubReportId("")}
+                    onProposal={openProposal}
+                  />
+                )}
+              </div>
             </>
           )}
           {page === "plans" && (
             <>
               <PageHeading
-                eyebrow="UPDATE PLANS"
-                title="更新計画"
-                description="変更と実行するコマンドを確認し、一工程ずつ進めます。"
+                eyebrow="UPDATES"
+                title="更新"
+                description="更新候補から方針・実行計画を作り、検証と旧版の整理を進めます。"
               />
-              {!plans.length ? (
-                <Empty icon={ListChecks} title="まだ更新計画はありません">
-                  プロジェクトまたは開発環境で候補を照合し、計画を作成してください。
-                </Empty>
+              <nav className="workspace-tabs" aria-label="更新の表示">
+                <button
+                  aria-pressed={updateView === "candidates"}
+                  onClick={() => setUpdateView("candidates")}
+                >
+                  更新候補
+                </button>
+                <button
+                  aria-pressed={updateView === "plans"}
+                  onClick={() => setUpdateView("plans")}
+                >
+                  計画・進行状況
+                </button>
+              </nav>
+              {updateView === "candidates" ? (
+                <UpdateCandidates
+                  data={data}
+                  onProject={openProject}
+                  onEnvironment={(id) => {
+                    setEnv(id);
+                    setPage("environment");
+                  }}
+                />
               ) : (
                 <>
-                  <div className="plan-tabs">
-                    {plans.map((p) => (
-                      <button
-                        className={p.id === plan?.id ? "active" : ""}
-                        key={p.id}
-                        onClick={() => setPlanId(p.id)}
-                      >
-                        {p.title}
-                        <Badge status={p.status} />
-                      </button>
-                    ))}
-                  </div>
-                  {plan && (
+                  <PlanCatalog
+                    data={data}
+                    selected={{
+                      kind: staticPlanId ? "github" : "local",
+                      id: staticPlanId || planId,
+                    }}
+                    onSelect={(target) => {
+                      if (target.kind === "github") {
+                        setStaticPlanId(target.id);
+                        setPlanId("");
+                      } else {
+                        setPlanId(target.id);
+                        setStaticPlanId("");
+                      }
+                      setConfirmed(false);
+                    }}
+                  />
+                  {staticPlan && (
+                    <StaticProposal
+                      data={data}
+                      plan={staticPlan}
+                      busy={!!busy}
+                      onProject={openProject}
+                      onClone={openGithub}
+                      onPrepare={(proposal, project) =>
+                        act(
+                          "対象コミットとローカル状態を再確認中",
+                          "prepare_github_proposal",
+                          { proposal, project },
+                          (p) => {
+                            openProject({ kind: "local", id: p.id });
+                            setNotice(
+                              "対象コミットと作業状態を確認しました。依存を照合し、実施する検証を選んで実行計画を作成してください。",
+                            );
+                          },
+                        )
+                      }
+                    />
+                  )}
+                  {!staticPlanId && plan && (
                     <>
                       <section className="panel details-panel">
                         <div className="section-heading">
                           <div>
                             <h2>{plan.title}</h2>
                             <p>{plan.reason}</p>
+                            <p className="muted">
+                              実行計画 · 対象環境:{" "}
+                              {data.environments.find(
+                                (e) => e.id === plan.environment,
+                              )?.name ?? plan.environment}
+                            </p>
                           </div>
                           <Badge status={plan.status} />
                         </div>
@@ -1705,7 +1809,7 @@ export function App() {
             <>
               <PageHeading
                 eyebrow="ACTIVITY LOG"
-                title="実行履歴"
+                title="履歴"
                 description="調査・計画・実行の経緯を、このデバイスに保存しています。"
               />
               {!data.history.length ? (
@@ -1826,9 +1930,11 @@ export function App() {
                   "選択したGitHubリポジトリを静的調査中",
                   "scan_github_repos",
                   { repositories: githubSelection, reference: githubReference },
-                  () => {
+                  (result) => {
                     setGitFork(null);
-                    setPage("github");
+                    setGithubReportId(result.reports[0]?.id ?? "");
+                    setPage("projects");
+                    setProjectKind("github");
                     setGithubSelection([]);
                   },
                 )
@@ -1891,9 +1997,11 @@ export function App() {
                           repositories: [r.nameWithOwner],
                           reference: githubReference,
                         },
-                        () => {
+                        (result) => {
                           setGitFork(null);
-                          setPage("github");
+                          setGithubReportId(result.reports[0]?.id ?? "");
+                          setPage("projects");
+                          setProjectKind("github");
                         },
                       )
                     }
@@ -1910,6 +2018,7 @@ export function App() {
                         (p) => {
                           setGitFork(null);
                           setEnv("local");
+                          setProjectKind("local");
                           setProjectId(p.id);
                         },
                       )

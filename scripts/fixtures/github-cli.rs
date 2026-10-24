@@ -13,7 +13,10 @@ fn main() {
         .map(String::as_str)
         .unwrap_or_default();
     let root = env::current_exe().unwrap().parent().unwrap().to_path_buf();
-    let a = "a".repeat(40);
+    let a = std::fs::read_to_string(root.join("fixed-head"))
+        .unwrap_or_else(|_| "a".repeat(40))
+        .trim()
+        .to_string();
     let b = "b".repeat(40);
     let tree = "c".repeat(40);
     if endpoint == "user/repos" {

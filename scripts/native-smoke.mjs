@@ -4,6 +4,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 const root = resolve(".");
 const temp = mkdtempSync(join(tmpdir(), "steward-native-"));
@@ -102,10 +103,34 @@ try {
   );
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.getByRole("heading", { name: "開発環境を、見渡す。" }).waitFor();
+  const mainNav = page.getByRole("navigation", {
+    name: "メインナビゲーション",
+  });
+  assert.deepEqual(await mainNav.getByRole("button").allTextContents(), [
+    "概要",
+    "環境・ツール",
+    "プロジェクト",
+    "更新",
+  ]);
+  assert.equal(
+    await page
+      .getByRole("navigation", { name: "補助ナビゲーション" })
+      .getByRole("button")
+      .count(),
+    2,
+  );
+  assert.equal(
+    await page.getByRole("combobox").count(),
+    0,
+    "Overview has no implicit environment filter",
+  );
+  await page.getByRole("button", { name: "環境・ツール", exact: true }).click();
   // Native customizable pickers must retain the dark theme while open.
   mkdirSync("test-results", { recursive: true });
   assert(await page.evaluate(() => CSS.supports("appearance", "base-select")));
-  const environmentPicker = page.getByRole("combobox", { name: "対象の環境" });
+  const environmentPicker = page.getByRole("combobox", {
+    name: "操作する環境",
+  });
   await environmentPicker.click();
   assert(await environmentPicker.evaluate((el) => el.matches(":open")));
   const pickerColors = await environmentPicker.evaluate((el) => ({
@@ -126,7 +151,7 @@ try {
   let snapshot = await native("snapshot");
   assert.equal(snapshot.projects.length, 0);
   assert(snapshot.data_path.startsWith(temp));
-  await page.getByRole("button", { name: "環境を調査", exact: true }).click();
+  await page.getByRole("button", { name: "再調査", exact: true }).click();
   await page
     .getByText("環境を調査中…", { exact: false })
     .waitFor({ state: "hidden", timeout: 120000 });
@@ -173,13 +198,13 @@ try {
   const plan = snapshot.plans[0];
   assert.equal(plan.status, "complete", JSON.stringify(plan));
   assert(plan.steps[0].output.includes("fixture passed"));
-  await page.getByRole("button", { name: "全体状況", exact: true }).click();
+  await page.getByRole("button", { name: "概要", exact: true }).click();
   mkdirSync("test-results", { recursive: true });
   await page.screenshot({
     path: "test-results/native-overview.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "開発環境", exact: true }).click();
+  await page.getByRole("button", { name: "環境・ツール", exact: true }).click();
   const inventory = snapshot.inventories[0];
   const visibleManagers = [
     ...new Set(
@@ -352,12 +377,40 @@ try {
     ([, name]) => name !== "gh",
   );
   githubSettings.manager_overrides.push(["local", "gh", fakeGithub]);
+  execFileSync(
+    "git",
+    [
+      "remote",
+      "add",
+      "origin",
+      "https://github.example.invalid/Example/monorepo.git",
+    ],
+    { cwd: fixture, windowsHide: true, stdio: "pipe" },
+  );
+  writeFileSync(join(fixture, ".gitignore"), "node_modules/\n");
+  execFileSync("git", ["add", "."], {
+    cwd: fixture,
+    windowsHide: true,
+    stdio: "pipe",
+  });
+  execFileSync("git", ["commit", "-m", "verified fixture"], {
+    cwd: fixture,
+    windowsHide: true,
+    stdio: "pipe",
+  });
+  writeFileSync(
+    join(temp, "fixed-head"),
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture,
+      windowsHide: true,
+      encoding: "utf8",
+    }),
+  );
+  await native("rescan_project", { project: project.id });
   await native("save_settings", githubSettings);
   await page.setViewportSize({ width: 1400, height: 1000 });
-  await page.getByRole("button", { name: "GitHub調査", exact: true }).click();
-  await page
-    .getByRole("button", { name: "リポジトリを選択", exact: true })
-    .click();
+  await page.getByRole("button", { name: "プロジェクト", exact: true }).click();
+  await page.getByRole("button", { name: "GitHubから", exact: true }).click();
   await page
     .getByRole("checkbox", { name: "Example/monorepoを調査対象に選択" })
     .check();
@@ -371,20 +424,28 @@ try {
     })
     .click();
   await page
-    .getByRole("heading", { name: "GitHub上で調査", exact: true })
+    .getByRole("heading", { name: "プロジェクト", exact: true })
     .waitFor();
-  await page.getByRole("table", { name: "GitHubの調査結果" }).waitFor();
+  await page
+    .getByRole("region", { name: "プロジェクト一覧", exact: true })
+    .waitFor();
   await page
     .getByRole("checkbox", { name: "Example/monorepo (main)を照合対象に選択" })
     .check();
   await page
-    .getByRole("button", { name: "選択した結果を照合（1件）", exact: true })
+    .getByRole("button", {
+      name: "選択したGitHub結果を照合（1件）",
+      exact: true,
+    })
     .click();
   await page
     .getByText("選択したGitHub依存を照合中…", { exact: false })
     .waitFor({ state: "hidden", timeout: 120000 });
   await page
-    .getByRole("button", { name: "Example/monorepo (main)", exact: true })
+    .getByRole("button", {
+      name: "Example/monorepoのGitHub調査・mainを開く",
+      exact: true,
+    })
     .click();
   await page
     .getByRole("table", { name: "GitHubの更新候補", exact: true })
@@ -407,6 +468,89 @@ try {
       (c) => c.name === "kleur" && c.candidate === "4.1.5",
     ),
   );
+  assert.equal(
+    await page
+      .getByRole("navigation", { name: "メインナビゲーション" })
+      .locator('[aria-current="page"]')
+      .getAttribute("aria-label"),
+    "更新",
+  );
+  await page.getByRole("button", { name: "プロジェクト", exact: true }).click();
+  assert.equal(
+    await page.locator(".catalog-group").count(),
+    1,
+    "Remote/local snapshots must share one logical repository",
+  );
+  await page
+    .getByRole("button", {
+      name: "Example/monorepoのGitHub調査・mainを開く",
+      exact: true,
+    })
+    .click();
+  const isolatedDb = new DatabaseSync(githubSnapshot.data_path);
+  const simulated = {
+    id: "wsl:display-fixture",
+    name: "WSL表示試験",
+    kind: "wsl",
+    home: "/tmp/fixture",
+    os: "linux",
+  };
+  isolatedDb
+    .prepare("INSERT INTO records VALUES (?,?,?)")
+    .run("environments", simulated.id, JSON.stringify(simulated));
+  isolatedDb.close();
+  // Refresh through a read-only operation, then change comparison scope without hiding the project.
+  await page
+    .getByRole("button", { name: "更新候補・脆弱性を照合", exact: true })
+    .click();
+  await page
+    .getByText("GitHub依存の更新候補を照合中…", { exact: false })
+    .waitFor({ state: "hidden", timeout: 120000 });
+  await page
+    .getByRole("combobox", { name: "比較・登録する環境" })
+    .selectOption(simulated.id);
+  assert(
+    await page.getByRole("table", { name: "GitHubの依存宣言" }).isVisible(),
+  );
+  assert.equal(await page.locator(".catalog-group").count(), 1);
+  await page.screenshot({
+    path: "test-results/native-projects-unified.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "更新", exact: true }).click();
+  await page
+    .getByRole("button", { name: "計画・進行状況", exact: true })
+    .click();
+  await page
+    .locator(".plan-catalog button")
+    .filter({ hasText: "Example/monorepo" })
+    .click();
+  await page
+    .getByRole("button", { name: "コミットと作業状態を再確認", exact: true })
+    .click();
+  await page
+    .getByText("対象コミットと作業状態を確認しました。", { exact: false })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("combobox", { name: "比較・登録する環境" })
+      .inputValue(),
+    simulated.id,
+  );
+  assert((await native("snapshot")).github_plans[0].workspace === project.id);
+  await page.getByRole("button", { name: "更新", exact: true }).click();
+  assert.equal(
+    await page.getByRole("combobox", { name: "比較・登録する環境" }).count(),
+    0,
+    "Update targets belong to each plan, not a global filter",
+  );
+  await page
+    .getByRole("button", { name: "計画・進行状況", exact: true })
+    .click();
+  await page
+    .locator(".plan-catalog button")
+    .filter({ hasText: "Example/monorepo" })
+    .click();
   await page.screenshot({
     path: "test-results/native-github-analysis.png",
     fullPage: true,
