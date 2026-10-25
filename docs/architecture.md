@@ -68,3 +68,7 @@ A legacy py registration is discovery evidence, not ownership. Python Install Ma
 Remote reports, cached update results, and static proposals use separate SQLite record namespaces (`github_projects`, `github_updates`, `github_plans`) from executable local projects/plans. They share manifest parsing and dependency/OSV analysis. A remote proposal has no executable steps and cannot be submitted to the local plan executor. Its creation checks the reference again and rejects a stale commit; rescanning invalidates cached updates and marks older proposals outdated when the commit/content changes. Batch errors preserve prior reports and appear separately.
 
 The UI exposes a dedicated GitHub investigation page. It distinguishes static acquisition, lookup failures, unsupported formats, declared checks, and device inventory from successful execution. See [github-investigation.md](github-investigation.md) for limits, supported formats, privacy boundaries and usage.
+
+## CI/CD analysis
+
+Local discovery and GitHub blob acquisition share `steward-core::ci`. Structured static reports retain scoped runtime constraints, references, commands and unresolved evidence. CI runtime declarations are separate from installed tools. Update, pin and validation plans carry review requirements; CI text is never added to the executable check allowlist. See [CI/CD analysis](ci-analysis.md) for supported paths, resolution limits and verification.

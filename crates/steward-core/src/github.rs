@@ -214,9 +214,7 @@ pub fn wanted(path: &str) -> bool {
         return false;
     }
     let name = path.rsplit('/').next().unwrap_or_default();
-    (projects::manifest(name) && name != "pyvenv.cfg")
-        || (path.starts_with(".github/workflows/")
-            && (path.ends_with(".yml") || path.ends_with(".yaml")))
+    (projects::manifest(name) && name != "pyvenv.cfg") || crate::ci::provider(path).is_some()
 }
 
 pub fn select_files(tree: &Value) -> Result<Vec<File>, String> {
@@ -261,21 +259,9 @@ pub fn select_files(tree: &Value) -> Result<Vec<File>, String> {
     Ok(files)
 }
 fn parse_file(project: &mut Project, path: &str, text: &str) -> Result<(), String> {
-    if path.starts_with(".github/workflows/") {
-        let _: Value = serde_saphyr::from_str(text).map_err(|e| e.to_string())?;
-        let pattern = regex::Regex::new(r#"(?m)^\s*(?:-\s*)?uses:\s*['\"]?([^'\"\s#]+)"#).unwrap();
-        for c in pattern.captures_iter(text) {
-            if let Some((name, version)) = c[1].rsplit_once('@') {
-                project.requirements.push(Requirement {
-                    manager: "github-actions".into(),
-                    name: name.into(),
-                    requested: version.into(),
-                    source: path.into(),
-                    section: "workflow".into(),
-                    resolved: String::new(),
-                });
-            }
-        }
+    if crate::ci::provider(path).is_some() {
+        let file = crate::ci::parse(path, text, &mut project.requirements)?;
+        project.ci.push(file);
         return Ok(());
     }
     projects::parse_manifest(
@@ -360,6 +346,7 @@ pub fn scan(
         fingerprint: String::new(),
         scanned_at: now(),
         manifest_files: vec![],
+        ci: vec![],
     };
     let mut fingerprint = Sha256::new();
     fingerprint.update(commit.as_bytes());
@@ -413,6 +400,7 @@ pub fn scan(
             }
         }
     }
+    crate::ci::finish(&mut project);
     projects::add_python_checks(&project.requirements, &mut project.scripts);
     project.scripts.sort();
     project.scripts.dedup();
@@ -499,6 +487,9 @@ pub fn proposal(report: &Report, updates: &[Update]) -> Result<Proposal, String>
             .filter(|f| f.status != "ok")
             .map(|f| format!("{}: {}", f.scope, f.message)),
     );
+    warnings.extend(crate::ci::plan_warnings(&report.project));
+    let mut seen = std::collections::BTreeSet::new();
+    warnings.retain(|warning| seen.insert(warning.clone()));
     Ok(Proposal {
         id: id(),
         report_id: report.id.clone(),

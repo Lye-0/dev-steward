@@ -1,3 +1,4 @@
+pub mod ci;
 pub mod cleanup;
 pub mod discovery;
 pub mod git_workflow;

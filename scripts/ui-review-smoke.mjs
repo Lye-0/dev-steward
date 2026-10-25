@@ -155,6 +155,26 @@ export async function reviewUi({ page, native, cloneParent }) {
       exact: true,
     })
     .click();
+  const ciPanel = page.getByRole("region", {
+    name: "CI/CDの解析結果",
+    exact: true,
+  });
+  await ciPanel.locator(".ci-file > summary").first().click();
+  await ciPanel
+    .getByRole("table", {
+      name: ".github/workflows/ci.ymlの実行環境",
+      exact: true,
+    })
+    .waitFor();
+  assert((await ciPanel.innerText()).includes("22.x"));
+  assert((await ciPanel.innerText()).includes("集計"));
+  await ciPanel
+    .getByText("検証・集計・デプロイの手順（2件）", { exact: true })
+    .click();
+  await page.screenshot({
+    path: "test-results/native-ci-analysis-760.png",
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "詳細を閉じる", exact: true }).click();
   await page.waitForFunction(
     () => document.activeElement.id === "project-catalog",

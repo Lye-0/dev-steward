@@ -1,3 +1,4 @@
+import { CiPanel } from "./CiPanel";
 import { useState } from "react";
 import type { Snapshot, Tool, GithubProposal } from "./types";
 type Act = (
@@ -97,6 +98,7 @@ export function GithubReports({
               </p>
             ))}
           </details>
+          <CiPanel project={report.project} />
           <section className="panel details-panel">
             <h2>依存・固定ツールの宣言</h2>
             <div className="search">

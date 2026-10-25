@@ -38,7 +38,21 @@ export interface Requirement {
   section: string;
   resolved: string;
 }
+export interface CiFile {
+  path: string;
+  provider: string;
+  runtimes: {
+    name: string;
+    requested: string;
+    scope: string;
+    resolved: string[];
+  }[];
+  steps: { scope: string; command: string; directory: string; shell: string }[];
+  references: string[];
+  warnings: string[];
+}
 export interface Project {
+  ci?: CiFile[];
   id: string;
   environment: string;
   name: string;

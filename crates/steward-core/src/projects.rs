@@ -520,6 +520,7 @@ pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Projec
         fingerprint: String::new(),
         scanned_at: now(),
         manifest_files: vec![],
+        ci: vec![],
     };
     let user_npmrc = if env.kind == "local" {
         std::env::var("NPM_CONFIG_USERCONFIG").unwrap_or_else(|_| join(&env.home, ".npmrc", env))
@@ -548,7 +549,7 @@ pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Projec
     )?);
     let mut candidates: BTreeSet<String> = files
         .lines()
-        .filter(|f| manifest(f.rsplit('/').next().unwrap_or(f)))
+        .filter(|f| manifest(f.rsplit('/').next().unwrap_or(f)) || crate::ci::provider(f).is_some())
         .filter(|f| !f.split('/').any(ignored))
         .map(str::to_string)
         .collect();
@@ -603,13 +604,19 @@ pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Projec
                 hash.update(relative.as_bytes());
                 hash.update(text.as_bytes());
                 project.manifest_files.push(relative.clone());
-                if let Err(e) = parse_manifest(
-                    &relative,
-                    &text,
-                    &mut project.requirements,
-                    &mut project.scripts,
-                    &mut project.package_manager,
-                ) {
+                let parsed = if crate::ci::provider(&relative).is_some() {
+                    crate::ci::parse(&relative, &text, &mut project.requirements)
+                        .map(|file| project.ci.push(file))
+                } else {
+                    parse_manifest(
+                        &relative,
+                        &text,
+                        &mut project.requirements,
+                        &mut project.scripts,
+                        &mut project.package_manager,
+                    )
+                };
+                if let Err(e) = parsed {
                     project.findings.push(finding(&relative, "error", e));
                 }
             }
@@ -720,6 +727,7 @@ pub fn scan(env: &Environment, settings: &Settings, path: &str) -> Result<Projec
     }
     add_python_checks(&project.requirements, &mut project.scripts);
     hash.update(serde_json::to_vec(&project.requirements).map_err(|e| e.to_string())?);
+    crate::ci::finish(&mut project);
     project.fingerprint = format!("{:x}", hash.finalize());
     if project.package_manager.is_empty() {
         project.package_manager = if project.manifest_files.contains(&"uv.lock".into()) {

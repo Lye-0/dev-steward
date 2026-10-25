@@ -98,7 +98,7 @@ fn main() {
                     '4' =>
                         r#"{"name":"web-fixture","dependencies":{"kleur":"^4.1.4"},"scripts":{"build":"DO NOT EXECUTE"}}"#,
                     '5' =>
-                        "name: Verify\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n",
+                        "name: Verify\non: push\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - uses: actions/setup-node@v6\n        with:\n          node-version: '22.x'\n      - run: npm test | tee results.txt\n      - run: grep tests results.txt\n",
                     '6' =>
                         "registry=https://registry.npmjs.org\n//registry.npmjs.org/:_authToken=never-persist-this-secret\n",
                     '7' => "3.12.15\n",

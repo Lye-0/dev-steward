@@ -1,3 +1,4 @@
+import { CiPanel } from "./CiPanel";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
@@ -1485,6 +1486,7 @@ export function App() {
                             </div>
                           </section>
                         )}
+                        <CiPanel project={project} />
                         <section className="panel">
                           <div className="section-heading padded">
                             <h3>固定ツール・依存関係</h3>

@@ -95,7 +95,9 @@ pub fn plan(
         &project.path,
         "verify",
     ));
-    Ok(Plan{id:plan_id,environment:env.id.clone(),project_id:Some(project.id.clone()),title:format!("{}: {} を {} に固定",project.name,tool.name,tool.version),reason:"デバイスに導入済みの版へプロジェクトの指定を揃えます。変更後の実行検証はプロジェクト画面から別途計画してください。".into(),evidence:vec![tool.path.clone(),format!("{} / {}",tool.manager,tool.version)],warnings:vec!["この操作だけでは互換性・起動・接続を確認したことになりません。検証後にコミットしてください。".into(),"Pythonの同期は仮想環境の再作成やビルド処理を伴う場合があります。旧Python本体は削除しません。".into(),"Rustはrustupが固定版を別ツールチェーンとして保持する場合があります。mise管理には追加しません。".into()],steps,created_at:now(),status:"ready".into(),fingerprint:project.fingerprint.clone()})
+    let mut plan = Plan{id:plan_id,environment:env.id.clone(),project_id:Some(project.id.clone()),title:format!("{}: {} を {} に固定",project.name,tool.name,tool.version),reason:"デバイスに導入済みの版へプロジェクトの指定を揃えます。変更後の実行検証はプロジェクト画面から別途計画してください。".into(),evidence:vec![tool.path.clone(),format!("{} / {}",tool.manager,tool.version)],warnings:vec!["この操作だけでは互換性・起動・接続を確認したことになりません。検証後にコミットしてください。".into(),"Pythonの同期は仮想環境の再作成やビルド処理を伴う場合があります。旧Python本体は削除しません。".into(),"Rustはrustupが固定版を別ツールチェーンとして保持する場合があります。mise管理には追加しません。".into()],steps,created_at:now(),status:"ready".into(),fingerprint:project.fingerprint.clone()};
+    plan.warnings.extend(crate::ci::plan_warnings(project));
+    Ok(plan)
 }
 pub fn apply(env: &Environment, step: &Step) -> Result<Output, String> {
     let version = step.args.first().ok_or("固定する版がありません")?;

@@ -40,6 +40,11 @@ writeFileSync(
   join(fixture, "pnpm-lock.yaml"),
   "lockfileVersion: '9.0'\npackages:\n  react@19.0.0: {}\n",
 );
+mkdirSync(join(fixture, ".github", "workflows"), { recursive: true });
+writeFileSync(
+  join(fixture, ".github", "workflows", "ci.yml"),
+  "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/setup-node@v6\n        with:\n          node-version: '22.x'\n      - run: npm test | tee results.txt\n      - run: grep tests results.txt\n",
+);
 for (const args of [
   ["init", "-b", "main"],
   ["config", "user.email", "fixture@example.invalid"],

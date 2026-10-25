@@ -75,6 +75,8 @@ pub struct Project {
     pub fingerprint: String,
     pub scanned_at: String,
     pub manifest_files: Vec<String>,
+    #[serde(default)]
+    pub ci: Vec<crate::ci::CiFile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

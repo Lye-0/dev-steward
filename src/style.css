@@ -1906,3 +1906,38 @@ label[for="dependency-search"] {
 #dependency-search {
   width: 100%;
 }
+
+.ci-file {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+.ci-file > summary {
+  display: list-item;
+  list-style-position: inside;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.ci-file > summary > * {
+  margin-right: 10px;
+}
+.ci-file details {
+  margin-block: 14px;
+}
+.ci-file summary {
+  cursor: pointer;
+}
+.ci-step pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ci-warnings li {
+  margin-block: 10px;
+  overflow-wrap: anywhere;
+}
+.ci-panel .path {
+  overflow-wrap: anywhere;
+}

@@ -208,6 +208,7 @@ pub fn update(
         ));
     }
     plan.warnings=vec!["更新候補の互換性・脆弱性修正は未保証です。各検証の成功と差分を確認してください。".into(),"同期や検証はプロジェクトのコード・ビルド処理を実行します。信頼できるプロジェクトで実行してください。".into(),"中断や失敗後に環境・ブランチを自動復元しません。履歴と差分を確認してください。".into(),"PRは自動マージしません。CIを確認し、別途マージしてください。".into()];
+    plan.warnings.extend(crate::ci::plan_warnings(project));
     Ok(plan)
 }
 
@@ -309,6 +310,7 @@ pub fn validate(
         "登録済みスクリプトを実行します。静的調査とは異なり、プロジェクトのコードが実行されます。",
     );
     add_checks(env, settings, p, checks, &mut plan)?;
+    plan.warnings.extend(crate::ci::plan_warnings(p));
     plan.warnings.push(
         "プロジェクトのスクリプトは任意のコードを実行できます。対象を確認してください。".into(),
     );

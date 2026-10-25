@@ -120,3 +120,94 @@ fn code_change_invalidates_plan_even_when_manifests_do_not_change() {
     let changed = projects::scan(&e, &Settings::default(), root.path().to_str().unwrap()).unwrap();
     assert_ne!(first.fingerprint, changed.fingerprint);
 }
+
+#[test]
+fn ci_is_discovered_locally_compared_and_carried_into_plans() {
+    let root = fixture();
+    let e = env(root.path());
+    std::fs::create_dir_all(root.path().join(".github/workflows")).unwrap();
+    std::fs::write(root.path().join("mise.toml"), "[tools]\nnode='24.22.1'\n").unwrap();
+    std::fs::write(root.path().join(".node-version"), "22.23.4\n").unwrap();
+    std::fs::write(root.path().join(".github/workflows/ci.yml"),"jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/setup-node@v6\n        with:\n          node-version-file: .node-version\n      - run: npm test | tee results.txt\n      - run: grep tests results.txt\n").unwrap();
+    git(root.path(), &["add", "."]);
+    git(root.path(), &["commit", "-m", "ci fixture"]);
+    let p = projects::scan(&e, &Settings::default(), root.path().to_str().unwrap()).unwrap();
+    assert_eq!(p.ci.len(), 1);
+    let mut python = p.clone();
+    python.requirements.push(Requirement {
+        manager: "uv".into(),
+        name: "python".into(),
+        requested: "3.11.17".into(),
+        source: ".python-version".into(),
+        section: "pin".into(),
+        resolved: String::new(),
+    });
+    python.ci[0].runtimes.push(steward_core::ci::CiRuntime {
+        name: "python".into(),
+        requested: "3.12".into(),
+        resolved: vec!["3.12".into()],
+        scope: "test".into(),
+    });
+    steward_core::ci::finish(&mut python);
+    assert!(
+        python.ci[0]
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("実行環境の相違") && w.contains("python"))
+    );
+    let mut ranged = p.clone();
+    ranged.requirements.push(Requirement {
+        manager: "engine".into(),
+        name: "node".into(),
+        requested: ">=18 <25".into(),
+        source: "package.json".into(),
+        section: "engines".into(),
+        resolved: String::new(),
+    });
+    ranged.ci[0].warnings.clear();
+    steward_core::ci::finish(&mut ranged);
+    assert!(
+        !ranged.ci[0]
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("実行環境の相違") && w.contains("package.json"))
+    );
+    assert!(
+        ranged.ci[0]
+            .warnings
+            .iter()
+            .any(|w| w.contains("範囲・別形式"))
+    );
+    let mut legacy = serde_json::to_value(&p).unwrap();
+    legacy.as_object_mut().unwrap().remove("ci");
+    assert!(
+        serde_json::from_value::<Project>(legacy)
+            .unwrap()
+            .ci
+            .is_empty()
+    );
+    assert!(
+        p.ci[0]
+            .runtimes
+            .iter()
+            .any(|r| r.name == "node" && r.resolved == vec!["22.23.4"])
+    );
+    assert!(
+        p.ci[0]
+            .warnings
+            .iter()
+            .any(|w| w.contains("実行環境の相違"))
+    );
+    assert!(
+        !p.scripts
+            .iter()
+            .any(|s| s.contains("grep") || s.contains("tee"))
+    );
+    let plan =
+        steward_core::plans::validate(&e, &Settings::default(), &p, &["test".into()]).unwrap();
+    assert!(plan.warnings.iter().any(|w| w.contains("CI/CD確認")));
+    assert!(plan.warnings.iter().any(|w| w.contains("集計")));
+    std::fs::write(root.path().join(".github/workflows/ci.yml"), "jobs: {}\n").unwrap();
+    let changed = projects::scan(&e, &Settings::default(), root.path().to_str().unwrap()).unwrap();
+    assert_ne!(p.fingerprint, changed.fingerprint);
+}

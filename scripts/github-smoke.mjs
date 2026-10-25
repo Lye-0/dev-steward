@@ -44,6 +44,14 @@ const report = scan.reports[0];
 assert.equal(report.complete, true);
 assert.equal(report.commit, "a".repeat(40));
 assert.equal(report.files.length, 7);
+assert.equal(report.project.ci.length, 1);
+assert(
+  report.project.ci[0].runtimes.some(
+    (r) => r.name === "node" && r.resolved.includes("22.x"),
+  ),
+);
+assert(report.project.ci[0].steps.some((s) => s.command.includes("grep")));
+assert(!report.project.scripts.some((s) => s.includes("grep")));
 assert(
   report.project.requirements.some(
     (r) => r.source === "apps/web/package.json" && r.name === "kleur",
@@ -64,6 +72,7 @@ assert(
 );
 assert(proposal.checks.includes("apps/web::build"));
 assert.equal(proposal.commit, report.commit);
+assert(proposal.warnings.some((w) => w.includes("CI/CD確認")));
 rejected("execute_step", { plan: proposal.id, confirmed: true });
 writeFileSync(join(temp, "head-moved"), "");
 rejected("plan_github_updates", { report: report.id });
